@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robustkit"
+version = "0.1.0"
+description = "Practical tools for robust analysis of a single continuous relationship: trend fitting, stability checks, influence diagnostics, and bootstrap uncertainty."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Mikael Lundqvist" }]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "statsmodels>=0.14",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+include = ["robustkit*"]
