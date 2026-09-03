@@ -23,6 +23,8 @@ from .core.stability import model_stability_pct
 from .core.diagnostics import cooks_diagnostic, cook_impact
 from .core.uncertainty import bootstrap_band, bca_bootstrap_ci
 from .core.consistency import check_row_integrity, compare_row_sets
+from .segmentation.hierarchy import hierarchical_segment, segment_sizes
+from .segmentation.apply import apply_by_segment
 
 __all__ = [
     "fit_huber_trend",
@@ -36,6 +38,9 @@ __all__ = [
     "bca_bootstrap_ci",
     "check_row_integrity",
     "compare_row_sets",
+    "hierarchical_segment",
+    "segment_sizes",
+    "apply_by_segment",
 ]
 
 __version__ = "0.1.0"

@@ -1,5 +1,9 @@
 # robustkit
 
+> ⚠️ **Under active development.** This is an early placeholder release
+> to claim the package name on PyPI. The API is incomplete and may
+> change without notice. Not yet recommended for production use.
+
 Practical tools for robust analysis of a single continuous relationship:
 y as a function of one continuous x.
 
@@ -12,8 +16,9 @@ observations, and get honest, bias-corrected uncertainty estimates.
 ## Status
 
 `robustkit.core` (trend fitting, stability, diagnostics, uncertainty,
-consistency checks) is stable and tested. Segmentation and
-information-theoretic feature selection are under active development
+consistency checks) and `robustkit.segmentation` (hierarchical
+grouping, per-segment analysis) are stable and tested.
+Information-theoretic feature selection is under active development
 and not yet included in this version.
 
 ## Installation
@@ -57,6 +62,32 @@ ci = bca_bootstrap_ci(x, y, statistic_fn=lambda x_, y_: np.median(y_))
 ```
 
 See `examples/quickstart_tutorial.py` for a complete, runnable walkthrough.
+
+## Segmentation
+
+Run any `robustkit.core` analysis independently across subgroups of a
+larger dataset, with automatic fallback to coarser groupings when a
+finer one is too small to analyze reliably:
+
+```python
+from robustkit import hierarchical_segment, apply_by_segment, model_stability_pct
+
+# hierarchy: finest to coarsest grouping
+hierarchy = [["department", "level", "status"], ["level", "status"], ["status"]]
+segmented = hierarchical_segment(df, hierarchy, min_size=20)
+
+report = apply_by_segment(
+    segmented, segment_col="segment_id", x_col="age", y_col="value",
+    analysis_fn=model_stability_pct,
+)
+```
+
+`apply_by_segment` works with any function shaped like
+`analysis_fn(x, y, **kwargs) -> dict` -- built-in ones
+(`model_stability_pct`, `cook_impact`, `bca_bootstrap_ci`, ...) or your
+own. Only scalar values in the returned dict end up in the report
+table; segments below `min_points` are skipped rather than causing an
+error.
 
 ## Design principles
 
