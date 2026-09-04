@@ -16,10 +16,11 @@ observations, and get honest, bias-corrected uncertainty estimates.
 ## Status
 
 `robustkit.core` (trend fitting, stability, diagnostics, uncertainty,
-consistency checks) and `robustkit.segmentation` (hierarchical
-grouping, per-segment analysis) are stable and tested.
-Information-theoretic feature selection is under active development
-and not yet included in this version.
+consistency checks), `robustkit.segmentation` (hierarchical grouping,
+per-segment analysis), and `robustkit.information` (mutual-information
+feature ranking) are stable and tested. A more advanced
+information-theoretic pairing layer (conditional MI for a second
+variable, synergy/redundancy scoring) is planned but not yet included.
 
 ## Installation
 
@@ -43,20 +44,16 @@ from robustkit import (
 x = np.random.default_rng(0).uniform(20, 60, 200)
 y = 1000 + 50 * x - 0.4 * x**2 + np.random.default_rng(1).normal(0, 500, 200)
 
-# Fit and predict
 fit = fit_huber_trend(x, y, degree=2)
 y_pred = predict_trend(fit, x_new=[30, 40, 50])
 
-# Does the conclusion survive a change of fitting method?
 stability = model_stability_pct(x, y)
 print("Median % spread between Huber/Tukey/OLS:", stability["median_pct_diff"])
 
-# Which points are influential, and how much do they matter?
 diag = cooks_diagnostic(x, y)
 impact = cook_impact(x, y, diag["flagged_indices"])
 print("Median % change in curve if flagged points removed:", impact["median_pct_change"])
 
-# Uncertainty
 band = bootstrap_band(x, y)
 ci = bca_bootstrap_ci(x, y, statistic_fn=lambda x_, y_: np.median(y_))
 ```
@@ -72,7 +69,6 @@ finer one is too small to analyze reliably:
 ```python
 from robustkit import hierarchical_segment, apply_by_segment, model_stability_pct
 
-# hierarchy: finest to coarsest grouping
 hierarchy = [["department", "level", "status"], ["level", "status"], ["status"]]
 segmented = hierarchical_segment(df, hierarchy, min_size=20)
 
@@ -88,6 +84,34 @@ report = apply_by_segment(
 own. Only scalar values in the returned dict end up in the report
 table; segments below `min_points` are skipped rather than causing an
 error.
+
+## Feature ranking (information)
+
+Rank features by mutual information with a target, normalized by each
+feature's own entropy, and classify them into four quadrants:
+
+```python
+from robustkit import rank_features, quadrant_report, plot_feature_space
+
+ranking = rank_features(df, target="value")
+report = quadrant_report(df, target="value")   # adds a `quadrant` column
+plot_feature_space(df, target="value")          # same quadrants, visualized
+```
+
+`quadrant_report` and `plot_feature_space` always agree on quadrant
+assignment -- both route through the same thresholding logic.
+
+**Caveat:** default thresholds are the *median* mutual information /
+efficiency across the ranked features. With only a handful of
+features, this can put a genuinely weak feature in the same "high"
+half as a strong one, since roughly half of any list sits above its
+own median regardless of how large the actual gap is. Median
+thresholding becomes meaningful with a reasonably large feature set;
+for a handful of candidates, read the raw `mutual_information` /
+`information_efficiency` values directly rather than relying on the
+quadrant label alone.
+
+See `examples/information_tutorial.py` for a complete walkthrough.
 
 ## Design principles
 

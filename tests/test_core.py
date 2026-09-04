@@ -1,10 +1,3 @@
-"""
-Smoke tests for robustkit.core. These check that every function runs
-end-to-end and returns internally consistent output on synthetic data
--- not a full statistical validation suite, but enough to catch
-breakage.
-"""
-
 import numpy as np
 import pytest
 
@@ -57,16 +50,13 @@ def test_cook_impact_with_injected_outlier():
     rng = np.random.default_rng(1)
     x = rng.uniform(20, 60, 100)
     y = 1000 + 50 * x + rng.normal(0, 100, 100)
-    # Inject one severe influential point
     x = np.append(x, 90)
     y = np.append(y, 20000)
 
     diag = cooks_diagnostic(x, y)
-    assert 100 in diag["flagged_indices"]  # the injected point (index 100)
+    assert 100 in diag["flagged_indices"]
 
     impact = cook_impact(x, y, diag["flagged_indices"])
-    # Removing a genuinely influential point should change the curve
-    # by a non-trivial amount somewhere along the grid.
     assert impact["max_pct_change"] > 1.0
 
 

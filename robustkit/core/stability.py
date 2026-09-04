@@ -17,9 +17,6 @@ def model_stability_pct(x, y, degree=2, n_points=50):
     Fit Huber, Tukey, and OLS trends to the same (x, y) data, evaluate
     all three on a common grid, and report how far apart they are as a
     percentage of the average predicted value at each grid point.
-
-    Returns a dict with the three predicted curves plus summary
-    statistics (median / 95th percentile / max percentage spread).
     """
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -36,7 +33,7 @@ def model_stability_pct(x, y, degree=2, n_points=50):
     curves = np.vstack([huber_pred, tukey_pred, ols_pred])
     spread = curves.max(axis=0) - curves.min(axis=0)
     avg = np.abs(curves.mean(axis=0))
-    avg[avg == 0] = np.nan  # avoid divide-by-zero; results in NaN, not inf
+    avg[avg == 0] = np.nan
     pct_spread = spread / avg * 100
 
     return {

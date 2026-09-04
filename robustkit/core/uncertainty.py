@@ -1,16 +1,6 @@
 """
 Quantify uncertainty in a fitted trend curve (or any statistic derived
 from (x, y)) via bootstrap resampling.
-
-bootstrap_band() gives a simple percentile-based confidence band around
-a Huber-fitted trend curve.
-
-bca_bootstrap_ci() gives a bias-corrected and accelerated (BCa)
-confidence interval for an arbitrary scalar statistic. BCa corrects for
-both bias and skew in the bootstrap distribution, which plain percentile
-bootstrap does not -- worth the extra computation when the underlying
-distribution is noticeably skewed (e.g. right-skewed salary or price
-data).
 """
 
 import numpy as np
@@ -20,9 +10,6 @@ from .trend import fit_huber_trend, predict_trend
 
 
 def bootstrap_band(x, y, degree=2, n_boot=500, ci=95, n_points=50, seed=0):
-    """
-    Percentile bootstrap confidence band for a Huber-fitted trend curve.
-    """
     rng = np.random.default_rng(seed)
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -47,16 +34,6 @@ def bootstrap_band(x, y, degree=2, n_boot=500, ci=95, n_points=50, seed=0):
 
 
 def bca_bootstrap_ci(x, y, statistic_fn, n_boot=1000, ci=95, seed=0):
-    """
-    Bias-corrected and accelerated (BCa) bootstrap confidence interval
-    for an arbitrary statistic computed from (x, y).
-
-    statistic_fn: callable(x, y) -> float
-
-    Returns the point estimate, the BCa interval bounds, and the
-    bias-correction (z0) and acceleration (a) parameters, in case you
-    want to inspect how much correction was actually applied.
-    """
     rng = np.random.default_rng(seed)
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -69,13 +46,10 @@ def bca_bootstrap_ci(x, y, statistic_fn, n_boot=1000, ci=95, seed=0):
         idx = rng.integers(0, n, n)
         boot_thetas[b] = statistic_fn(x[idx], y[idx])
 
-    # Bias correction: how far off-center is theta_hat within the
-    # bootstrap distribution?
     prop_less = np.mean(boot_thetas < theta_hat)
-    prop_less = np.clip(prop_less, 1e-6, 1 - 1e-6)  # avoid +/- inf
+    prop_less = np.clip(prop_less, 1e-6, 1 - 1e-6)
     z0 = stats.norm.ppf(prop_less)
 
-    # Acceleration via jackknife (leave-one-out)
     jack_thetas = np.empty(n)
     for i in range(n):
         mask = np.ones(n, dtype=bool)

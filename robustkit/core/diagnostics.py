@@ -22,33 +22,24 @@ def cooks_diagnostic(x, y, degree=2):
     Compute Cook's distance for each observation, based on an OLS fit
     of y ~ poly(x, degree). Flags points above the conventional 4/n
     threshold.
-
-    Implemented directly from the standard formula
-        D_i = (e_i^2 / (p * MSE)) * (h_i / (1 - h_i)^2)
-    where e_i are OLS residuals, h_i is the leverage (diagonal of the
-    hat matrix), and p is the number of fitted parameters (including
-    the intercept).
     """
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     n = len(y)
 
     X, _ = _design_matrix(x, degree)
-    X_design = np.column_stack([np.ones(n), X])  # add intercept column
+    X_design = np.column_stack([np.ones(n), X])
     p = X_design.shape[1]
 
-    # OLS via least squares
     beta, *_ = np.linalg.lstsq(X_design, y, rcond=None)
     y_hat = X_design @ beta
     residuals = y - y_hat
 
     mse = np.sum(residuals ** 2) / (n - p)
 
-    # Hat matrix diagonal (leverage), computed without forming the full
-    # n x n hat matrix
     Q, R = np.linalg.qr(X_design)
     leverage = np.sum(Q ** 2, axis=1)
-    leverage = np.clip(leverage, 1e-12, 1 - 1e-12)  # avoid divide-by-zero
+    leverage = np.clip(leverage, 1e-12, 1 - 1e-12)
 
     cooks_d = (residuals ** 2 / (p * mse)) * (leverage / (1 - leverage) ** 2)
 
@@ -67,7 +58,7 @@ def cook_impact(x, y, flagged_indices, degree=2, n_points=50):
     """
     Compare the Huber-fitted trend curve with and without the given
     flagged observations, to quantify how much they actually pull the
-    curve -- not just whether they are statistically unusual.
+    curve.
     """
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)

@@ -3,8 +3,7 @@ robustkit quickstart tutorial
 ==============================
 
 A self-contained walkthrough of every function in robustkit.core,
-run against a small synthetic dataset generated inline (no external
-data files needed). Run with:
+run against a small synthetic dataset generated inline. Run with:
 
     python examples/quickstart_tutorial.py
 """
@@ -19,11 +18,6 @@ from robustkit import (
 
 
 def make_example_data(n=200, seed=0, n_outliers=4):
-    """
-    A small synthetic (x, y) pair with a concave trend and a handful
-    of injected outliers, so every diagnostic below has something to
-    find.
-    """
     rng = np.random.default_rng(seed)
     x = rng.uniform(20, 60, n)
     y = 1000 + 60 * x - 0.5 * x**2 + rng.normal(0, 400, n)
@@ -36,11 +30,8 @@ def make_example_data(n=200, seed=0, n_outliers=4):
 
 def main():
     x, y = make_example_data()
-    print(f"Example dataset: {len(x)} points, {4} injected outliers\n")
+    print(f"Example dataset: {len(x)} points, 4 injected outliers\n")
 
-    # ------------------------------------------------------------------
-    # 1. Fit and compare three trend curves
-    # ------------------------------------------------------------------
     print("=== 1. Trend fitting ===")
     huber_fit = fit_huber_trend(x, y, degree=2)
     tukey_fit = fit_tukey_trend(x, y, degree=2)
@@ -53,19 +44,12 @@ def main():
     print("  OLS:  ", predict_trend(ols_fit, check_points).round(0))
     print()
 
-    # ------------------------------------------------------------------
-    # 2. Does the conclusion survive a change of method?
-    # ------------------------------------------------------------------
     print("=== 2. Model stability ===")
     stability = model_stability_pct(x, y)
     print(f"Median % spread between methods: {stability['median_pct_diff']:.1f}%")
     print(f"95th percentile % spread:        {stability['p95_pct_diff']:.1f}%")
-    print(f"Max % spread:                    {stability['max_pct_diff']:.1f}%")
-    print("(Large spread here is expected -- this example has outliers by design.)\n")
+    print(f"Max % spread:                    {stability['max_pct_diff']:.1f}%\n")
 
-    # ------------------------------------------------------------------
-    # 3. Which points are influential, and does it matter?
-    # ------------------------------------------------------------------
     print("=== 3. Influence diagnostics ===")
     diag = cooks_diagnostic(x, y)
     print(f"Flagged {len(diag['flagged_indices'])} of {len(x)} points "
@@ -73,15 +57,10 @@ def main():
 
     if len(diag["flagged_indices"]) > 0:
         impact = cook_impact(x, y, diag["flagged_indices"])
-        print(f"Median % change in curve if flagged points removed: "
-              f"{impact['median_pct_change']:.1f}%")
-        print(f"Max % change:                                       "
-              f"{impact['max_pct_change']:.1f}%")
+        print(f"Median % change in curve if flagged points removed: {impact['median_pct_change']:.1f}%")
+        print(f"Max % change:                                       {impact['max_pct_change']:.1f}%")
     print()
 
-    # ------------------------------------------------------------------
-    # 4. Uncertainty
-    # ------------------------------------------------------------------
     print("=== 4. Uncertainty ===")
     band = bootstrap_band(x, y, n_boot=200)
     mid = len(band["grid"]) // 2
