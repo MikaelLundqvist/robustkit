@@ -18,9 +18,18 @@ observations, and get honest, bias-corrected uncertainty estimates.
 `robustkit.core` (trend fitting, stability, diagnostics, uncertainty,
 consistency checks), `robustkit.segmentation` (hierarchical grouping,
 per-segment analysis), and `robustkit.information` (mutual-information
-feature ranking) are stable and tested. A more advanced
-information-theoretic pairing layer (conditional MI for a second
-variable, synergy/redundancy scoring) is planned but not yet included.
+feature ranking, quadrant classification, and pairwise
+redundancy/synergy scoring) are stable and tested.
+
+**Note on `information_efficiency`:** values can exceed 1.0 for
+continuous features. `mutual_information` is estimated on the
+full-resolution continuous values, while `entropy_bits` is computed on
+a binned version of the same feature (since `entropy()` expects
+categorical input). Binning discards information, so `entropy_bits` is
+a lower bound on the feature's true entropy -- an efficiency above 1.0
+signals that the feature carries more usable information than a coarse
+categorical summary of it would capture. This is expected behavior,
+not a bug.
 
 ## Installation
 
@@ -112,6 +121,40 @@ for a handful of candidates, read the raw `mutual_information` /
 quadrant label alone.
 
 See `examples/information_tutorial.py` for a complete walkthrough.
+
+## Feature pairing (information)
+
+Beyond ranking single features, evaluate *pairs* of features together:
+how redundant are they with each other, and does knowing one reveal
+additional predictive value in the other (synergy, e.g. an interaction
+effect)?
+
+```python
+from robustkit import (
+    conditional_mutual_information, communication_score,
+    rank_by_communication, pair_redundancy, pair_synergy,
+    rank_communicative_pairs,
+)
+
+# How communicable is a single feature -- not just predictive, but
+# suitable for a clear chart/table (adequate group sizes, homogeneous
+# groups, few enough categories to show at once)?
+comm_ranking = rank_by_communication(df, target="value")
+
+# How much does region's relevance to the target change once
+# department is already known?
+synergy = pair_synergy(df, feature_1="department", feature_2="region", target="value")
+
+# Rank every candidate pair by combined relevance, penalizing
+# redundant pairs and rewarding genuine synergy
+pairs = rank_communicative_pairs(df, target="value")
+```
+
+All mutual-information-based quantities in this module (`rank_features`,
+`conditional_mutual_information`, `pair_redundancy`, `pair_synergy`,
+`communication_score`) are expressed in **bits**, consistent with
+`entropy()` -- internally, scikit-learn's MI estimators return nats
+and are converted before being used anywhere in this package.
 
 ## Design principles
 

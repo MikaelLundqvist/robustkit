@@ -25,6 +25,9 @@ from .information.mutual_info import rank_features, information_efficiency
 from .information.quadrants import quadrant_report
 from .information.visualization import plot_feature_space, feature_map
 from .information.profile import profile, print_profile
+from .information.conditional_mi import conditional_mutual_information
+from .information.communication import communication_score, rank_by_communication
+from .information.pairs import pair_redundancy, pair_synergy, rank_communicative_pairs
 
 __all__ = [
     "fit_huber_trend",
@@ -49,6 +52,12 @@ __all__ = [
     "feature_map",
     "profile",
     "print_profile",
+    "conditional_mutual_information",
+    "communication_score",
+    "rank_by_communication",
+    "pair_redundancy",
+    "pair_synergy",
+    "rank_communicative_pairs",
 ]
 
 __version__ = "0.0.1"
