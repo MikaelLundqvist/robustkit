@@ -31,6 +31,9 @@ from .information.pairs import pair_redundancy, pair_synergy, rank_communicative
 from .common.quadrants import classify_quadrants
 from .benchmark.global_model import fit_huber_benchmark, segment_position_report
 from .benchmark.robustness_map import feature_robustness_report, plot_feature_robustness
+from .report.dispersion import iqr, dispersion_ratio, dispersion_by_bin
+from .report.visualize_analyst import plot_analyst_view
+from .report.visualize_publisher import plot_publisher_view
 
 __all__ = [
     "fit_huber_trend",
@@ -66,6 +69,11 @@ __all__ = [
     "segment_position_report",
     "feature_robustness_report",
     "plot_feature_robustness",
+    "iqr",
+    "dispersion_ratio",
+    "dispersion_by_bin",
+    "plot_analyst_view",
+    "plot_publisher_view",
 ]
 
 __version__ = "0.0.1"

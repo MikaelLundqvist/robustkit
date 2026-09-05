@@ -19,8 +19,9 @@ observations, and get honest, bias-corrected uncertainty estimates.
 consistency checks), `robustkit.segmentation` (hierarchical grouping,
 per-segment analysis), `robustkit.information` (mutual-information
 feature ranking, quadrant classification, pairwise redundancy/synergy
-scoring), and `robustkit.benchmark` (global-trend segment comparison,
-Robustness Map) are stable and tested.
+scoring), `robustkit.benchmark` (global-trend segment comparison,
+Robustness Map), and `robustkit.report` (analyst vs. publisher views,
+dispersion measures) are stable and tested.
 
 **Note on `information_efficiency`:** values can exceed 1.0 for
 continuous features. `mutual_information` is estimated on the
@@ -174,6 +175,36 @@ barely matters), **fragile** (both -- least trustworthy).
 `feature_robustness_report`/`plot_feature_robustness` (benchmark) both
 route through the same shared classifier, `robustkit.classify_quadrants`
 -- any future quadrant-based analysis in this package will too.
+
+## Analyst view vs. publisher view
+
+Two visualizations that look superficially similar but answer
+genuinely different questions:
+
+```python
+from robustkit import plot_analyst_view, plot_publisher_view, dispersion_ratio, iqr
+
+# "How confident are we in the trend estimate?" -- a bootstrap
+# confidence band that SHRINKS as sample size grows.
+plot_analyst_view(df["age"], df["salary"])
+
+# "How spread out are actual values in the population?" -- a median +
+# IQR band that does NOT shrink with more data, since it reflects
+# real dispersion, not estimation uncertainty. show_points defaults to
+# False, since this view is meant for publishing potentially sensitive
+# data (e.g. individual salaries) without exposing raw points.
+plot_publisher_view(df["age"], df["salary"])
+```
+
+This distinction matters in practice: with 20x more data (same
+underlying distribution), the analyst view's confidence band roughly
+halves in width, while the publisher view's IQR band stays essentially
+unchanged -- confirmed by the package's own test suite.
+
+`dispersion_ratio(y)` -- (Q3-Q1)/median -- and `iqr(y)` are available
+standalone for tabular reporting; `dispersion_by_bin(x, y, n_bins=10)`
+computes both across bins of a continuous x, e.g. to check whether
+dispersion (inequality) grows with age.
 
 ## Feature pairing (information)
 
