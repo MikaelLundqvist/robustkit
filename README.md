@@ -17,9 +17,10 @@ observations, and get honest, bias-corrected uncertainty estimates.
 
 `robustkit.core` (trend fitting, stability, diagnostics, uncertainty,
 consistency checks), `robustkit.segmentation` (hierarchical grouping,
-per-segment analysis), and `robustkit.information` (mutual-information
-feature ranking, quadrant classification, and pairwise
-redundancy/synergy scoring) are stable and tested.
+per-segment analysis), `robustkit.information` (mutual-information
+feature ranking, quadrant classification, pairwise redundancy/synergy
+scoring), and `robustkit.benchmark` (global-trend segment comparison,
+Robustness Map) are stable and tested.
 
 **Note on `information_efficiency`:** values can exceed 1.0 for
 continuous features. `mutual_information` is estimated on the
@@ -121,6 +122,58 @@ for a handful of candidates, read the raw `mutual_information` /
 quadrant label alone.
 
 See `examples/information_tutorial.py` for a complete walkthrough.
+
+## Benchmarking against a global trend
+
+Compare each segment's observed outcome against what a single global
+robust trend predicts, with bootstrap uncertainty on the difference --
+answers "which groups deviate from the overall trend, and by how
+much?" rather than "how does the trend look overall?":
+
+```python
+from robustkit import segment_position_report
+
+report = segment_position_report(
+    df, segment_col="department", x_col="age", y_col="salary",
+)
+#   segment    n  observed_median  expected_median  difference  ci_lower  ci_upper
+#   Finance  176        48339.70         47799.82      539.88    202.15   1031.01
+#        HR  174        45718.84         46647.39     -928.55  -1293.26   -580.36
+#        IT  250        47226.50         47126.91       99.59   -117.56    510.81
+```
+
+A segment's confidence interval crossing zero means no clear deviation
+from the benchmark; HR and Finance above don't cross zero, IT does.
+
+## Robustness Map
+
+Classify features by how much a conclusion about their relationship
+with the target depends on (a) fitting method choice and (b) specific
+influential observations -- two genuinely different failure modes that
+a single diagnostic can miss:
+
+```python
+from robustkit import feature_robustness_report, plot_feature_robustness
+
+report = feature_robustness_report(df, target="value")
+#   feature  stability_pct  cook_impact_pct    quadrant
+#      CRIM          8.9             17.1     fragile
+#       AGE         16.8             15.5     fragile
+#        RM          4.9              0.1     robust
+#       TAX         22.2              1.4     structural_sensitivity
+
+plot_feature_robustness(report=report)
+```
+
+Four quadrants: **robust** (low spread, low impact), **structural
+sensitivity** (sensitive to fitting method, not to specific points),
+**data sensitive** (a few points drive the conclusion, method choice
+barely matters), **fragile** (both -- least trustworthy).
+
+`quadrant_report`/`plot_feature_space` (information) and
+`feature_robustness_report`/`plot_feature_robustness` (benchmark) both
+route through the same shared classifier, `robustkit.classify_quadrants`
+-- any future quadrant-based analysis in this package will too.
 
 ## Feature pairing (information)
 
