@@ -71,6 +71,32 @@ ci = bca_bootstrap_ci(x, y, statistic_fn=lambda x_, y_: np.median(y_))
 
 See `examples/quickstart_tutorial.py` for a complete, runnable walkthrough.
 
+## Trend growth rate and goodness of fit
+
+```python
+from robustkit import trend_derivative, goodness_of_fit, compare_polynomial_degrees
+
+fit = fit_huber_trend(df["age"], df["salary"])
+
+# Rate of change of the trend itself (e.g. "salary growth per year of
+# age"), not just its level
+rates = trend_derivative(fit, x=[30, 40, 50])
+
+# How well does this fit actually explain the variation in y?
+goodness_of_fit(df["age"], df["salary"], degree=2)
+
+# Don't assume a quadratic trend is always the right choice -- check
+# empirically whether a higher degree captures meaningfully more
+compare_polynomial_degrees(df["age"], df["salary"], degrees=(1, 2, 3, 4))
+```
+
+**Note:** x is standardized internally before building polynomial
+features (both here and throughout `robustkit.core`), since raw
+polynomial features become numerically unstable at higher degrees for
+realistic x scales (e.g. age^5 vastly outscales age^1). This is
+transparent to callers -- `predict_trend` and `trend_derivative` still
+take and return values in the original x scale.
+
 ## Segmentation
 
 Run any `robustkit.core` analysis independently across subgroups of a

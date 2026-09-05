@@ -14,7 +14,7 @@ dependency.
 
 import numpy as np
 
-from .trend import _design_matrix, fit_huber_trend, predict_trend
+from .trend import _fit_design_matrix, fit_huber_trend, predict_trend
 
 
 def cooks_diagnostic(x, y, degree=2):
@@ -27,7 +27,7 @@ def cooks_diagnostic(x, y, degree=2):
     y = np.asarray(y, dtype=float)
     n = len(y)
 
-    X, _ = _design_matrix(x, degree)
+    X, _, _ = _fit_design_matrix(x, degree)
     X_design = np.column_stack([np.ones(n), X])
     p = X_design.shape[1]
 

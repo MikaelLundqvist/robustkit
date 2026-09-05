@@ -13,11 +13,12 @@ Modules:
     robustkit.information    -- mutual-information-based feature ranking
 """
 
-from .core.trend import fit_huber_trend, fit_tukey_trend, fit_ols_trend, predict_trend
+from .core.trend import fit_huber_trend, fit_tukey_trend, fit_ols_trend, predict_trend, trend_derivative
 from .core.stability import model_stability_pct
 from .core.diagnostics import cooks_diagnostic, cook_impact
 from .core.uncertainty import bootstrap_band, bca_bootstrap_ci
 from .core.consistency import check_row_integrity, compare_row_sets
+from .core.goodness_of_fit import goodness_of_fit, compare_polynomial_degrees
 from .segmentation.hierarchy import hierarchical_segment, segment_sizes
 from .segmentation.apply import apply_by_segment
 from .information.entropy import entropy
@@ -40,6 +41,7 @@ __all__ = [
     "fit_tukey_trend",
     "fit_ols_trend",
     "predict_trend",
+    "trend_derivative",
     "model_stability_pct",
     "cooks_diagnostic",
     "cook_impact",
@@ -47,6 +49,8 @@ __all__ = [
     "bca_bootstrap_ci",
     "check_row_integrity",
     "compare_row_sets",
+    "goodness_of_fit",
+    "compare_polynomial_degrees",
     "hierarchical_segment",
     "segment_sizes",
     "apply_by_segment",
