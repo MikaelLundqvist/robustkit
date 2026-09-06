@@ -37,6 +37,12 @@ from .report.visualize_analyst import plot_analyst_view
 from .report.visualize_publisher import plot_publisher_view
 from .quantiles.io import load_scb_json_stat
 from .quantiles.trend import prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
+from .quantiles.reconstruct import (
+    expand_aggregated_group, expand_aggregated_table, check_reconstruction_quality,
+    expand_aggregated_group_flat, expand_aggregated_group_borrowed_dispersion,
+    expand_aggregated_table_flat, expand_aggregated_table_borrowed_dispersion,
+    compare_reconstruction_methods,
+)
 
 __all__ = [
     "fit_huber_trend",
@@ -84,6 +90,14 @@ __all__ = [
     "prepare_quantile_trend",
     "plot_quantile_trend",
     "quantile_trend_dispersion",
+    "expand_aggregated_group",
+    "expand_aggregated_table",
+    "check_reconstruction_quality",
+    "expand_aggregated_group_flat",
+    "expand_aggregated_group_borrowed_dispersion",
+    "expand_aggregated_table_flat",
+    "expand_aggregated_table_borrowed_dispersion",
+    "compare_reconstruction_methods",
 ]
 
 __version__ = "0.0.1"

@@ -22,10 +22,9 @@ feature ranking, quadrant classification, pairwise redundancy/synergy
 scoring), `robustkit.benchmark` (global-trend segment comparison,
 Robustness Map), `robustkit.report` (analyst vs. publisher views,
 dispersion measures), and `robustkit.quantiles` (generic JSON-stat
-loading and published-quantile-trend visualization) are stable and
-tested. `robustkit.quantiles.reconstruct` (approximate individual-level
-reconstruction from aggregated summaries) is planned but not yet
-included.
+loading, published-quantile-trend visualization, and lognormal-
+calibrated reconstruction of individual-level data from aggregated
+summaries) are stable and tested.
 
 **Note on `information_efficiency`:** values can exceed 1.0 for
 continuous features. `mutual_information` is estimated on the
@@ -271,6 +270,91 @@ group means, for when only summary statistics (not quantiles) are
 available -- is planned as a follow-up (`robustkit.quantiles.reconstruct`).
 
 See `examples/quantiles_tutorial.py` for a complete walkthrough.
+
+## Reconstructing individual-level data from aggregated summaries
+
+For the complementary case -- only aggregated group summaries (n,
+Q1, median, Q3) are available, not the quantile trend itself as the
+final answer, and you want to run `robustkit.core` analyses as if
+individual data existed:
+
+```python
+from robustkit import expand_aggregated_table, check_reconstruction_quality, fit_huber_trend
+
+# One row per group (e.g. year), with n/q1/median/q3 columns
+synthetic = expand_aggregated_table(
+    summary_df, n_col="n", q1_col="q1", median_col="median", q3_col="q3",
+    group_cols=["year"], value_name="salary",
+)
+
+# Now usable exactly like real individual-level data:
+fit = fit_huber_trend(synthetic["year"], synthetic["salary"])
+```
+
+Method: a lognormal distribution is calibrated (via the IQR) to match
+each group's reported Q1/median/Q3, then `n` synthetic values are
+drawn from it. Validated end-to-end against real published SCB salary
+data: a Huber trend fitted on reconstructed pseudo-individual data
+tracked the true published median trend within 2% across 12 years.
+
+**Note on what this recovers:** because a Huber (or Tukey) fit on
+right-skewed reconstructed data tracks something close to the
+*median* trend it was calibrated against -- not the arithmetic mean --
+this is consistent with, not a limitation of, the reconstruction
+method. To target the mean instead, fit on `log(value)` and
+exponentiate predictions back, which approximates the geometric mean.
+
+Always check `check_reconstruction_quality()` before trusting a
+reconstruction: real Q1/median/Q3 triples aren't always perfectly
+consistent with a pure lognormal shape.
+
+**Warning -- unbounded tail at large n:** a lognormal has no natural
+upper limit, and its expected maximum grows with n. Reconstructing at
+the TRUE group size from a national table (SCB salary tables can
+report n in the hundreds of thousands to millions) can produce
+implausibly extreme tail values -- real salaries have practical
+ceilings a pure lognormal doesn't know about. This package's own
+examples and tests deliberately scale n down to a few thousand for
+demonstration; calibration quality (matching Q1/median/Q3) doesn't
+depend on reproducing the true population size, but tail plausibility
+does. No clipping is applied automatically.
+
+### When only a mean is available (no quantiles at all)
+
+Some tables (e.g. SCB's age-breakdown salary tables) report only a
+mean per group, with no spread information. Two deliberately separate
+methods are provided, each making a different explicit assumption --
+compare them rather than silently picking one:
+
+```python
+from robustkit import (
+    expand_aggregated_table_flat, expand_aggregated_table_borrowed_dispersion,
+    compare_reconstruction_methods,
+)
+
+# Method 1: repeat the mean n times -- zero within-group spread.
+# Recovers between-group regression coefficients reasonably well
+# (validated in the original technique this is based on) but
+# understates individual-level variation.
+flat = expand_aggregated_table_flat(df, n_col="n", mean_col="mean_salary", group_cols=["age"])
+
+# Method 2: borrow a dispersion_ratio from a DIFFERENT table that does
+# report quantiles, and use it to imply an approximate spread around
+# the mean. Stacks two assumptions (mean-as-median, and that the
+# borrowed ratio transfers to this population) -- illustrative, not a
+# substitute for genuine quantile data for this specific table.
+borrowed = expand_aggregated_table_borrowed_dispersion(
+    df, n_col="n", mean_col="mean_salary", dispersion_ratio=0.45, group_cols=["age"],
+)
+
+# Compare both for a single group directly:
+compare_reconstruction_methods(n=2000, mean=52200, dispersion_ratio=0.45)
+```
+
+Both methods are documented with their specific assumptions rather
+than presented as equally valid defaults -- being explicit about which
+assumption was made lets the analyst judge how much a conclusion
+depends on it, rather than presenting an assumption as a measurement.
 
 ## Feature pairing (information)
 
