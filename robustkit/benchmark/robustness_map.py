@@ -50,8 +50,26 @@ def feature_robustness_report(df, target, features=None, degree=2,
                                     barely matters)
         fragile                 -- high stability spread AND high Cook
                                     impact (the least trustworthy)
+
+    Requires at least 2 features. Quadrant assignment is threshold-
+    based (median by default, see robustkit.classify_quadrants) --
+    with a single feature, that feature is trivially "at or above its
+    own median" on both axes, so it would always be classified
+    "fragile" regardless of its actual stability/impact values. This
+    is a property of median-based thresholding with n=1, not a
+    meaningful result, so it is rejected explicitly here rather than
+    silently returning a misleading label.
     """
     features = features or [c for c in df.columns if c != target]
+    if len(features) < 2:
+        raise ValueError(
+            f"feature_robustness_report requires at least 2 features to classify "
+            f"meaningfully (quadrant thresholds are computed across the candidate "
+            f"features); got {len(features)}: {features}. With a single feature, "
+            f"median-based thresholds are degenerate and always classify it as "
+            f"'fragile' regardless of its actual values."
+        )
+
     y = df[target].to_numpy(dtype=float)
 
     rows = []

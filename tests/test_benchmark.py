@@ -81,11 +81,23 @@ def test_feature_robustness_report_classifies_fragile_feature():
     x = np.append(x, [25, 27, 30])
     y = np.append(y, [5.0, 3.0, 8.0])
 
-    df = pd.DataFrame({"x": x, "target": y})
-    report = feature_robustness_report(df, target="target", features=["x"])
+    # A second, well-behaved feature is required alongside "x" -- with
+    # only one feature, quadrant thresholding is degenerate (see
+    # feature_robustness_report's docstring) and now raises explicitly.
+    x_stable = np.concatenate([rng.uniform(0, 10, n), [(v - 5) / 2 for v in [5.0, 3.0, 8.0]]])
+
+    df = pd.DataFrame({"x": x, "x_stable": x_stable, "target": y})
+    report = feature_robustness_report(df, target="target", features=["x", "x_stable"])
 
     assert "quadrant" in report.columns
-    assert report.iloc[0]["cook_impact_pct"] > 5
+    x_row = report[report["feature"] == "x"].iloc[0]
+    assert x_row["cook_impact_pct"] > 5
+
+
+def test_feature_robustness_report_rejects_single_feature():
+    df = pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "target": [1.0, 2.0, 3.0, 4.0]})
+    with pytest.raises(ValueError):
+        feature_robustness_report(df, target="target", features=["x"])
 
 
 def test_plot_feature_robustness_matches_report_quadrants():
