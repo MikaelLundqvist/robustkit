@@ -20,8 +20,12 @@ consistency checks), `robustkit.segmentation` (hierarchical grouping,
 per-segment analysis), `robustkit.information` (mutual-information
 feature ranking, quadrant classification, pairwise redundancy/synergy
 scoring), `robustkit.benchmark` (global-trend segment comparison,
-Robustness Map), and `robustkit.report` (analyst vs. publisher views,
-dispersion measures) are stable and tested.
+Robustness Map), `robustkit.report` (analyst vs. publisher views,
+dispersion measures), and `robustkit.quantiles` (generic JSON-stat
+loading and published-quantile-trend visualization) are stable and
+tested. `robustkit.quantiles.reconstruct` (approximate individual-level
+reconstruction from aggregated summaries) is planned but not yet
+included.
 
 **Note on `information_efficiency`:** values can exceed 1.0 for
 continuous features. `mutual_information` is estimated on the
@@ -231,6 +235,42 @@ unchanged -- confirmed by the package's own test suite.
 standalone for tabular reporting; `dispersion_by_bin(x, y, n_bins=10)`
 computes both across bins of a continuous x, e.g. to check whether
 dispersion (inequality) grows with age.
+
+## Loading published quantile tables (SCB / JSON-stat)
+
+Some statistics agencies (e.g. Statistics Sweden, SCB) publish
+quantiles (Q1/median/Q3) directly, with no individual-level data
+available at all. `robustkit.quantiles` loads these tables generically
+via JSON-stat, a standardized dimensional-data format used by SCB and
+other national statistics agencies -- avoiding the fragility of
+parsing metadata out of column-name strings in a wide CSV export.
+
+```python
+from robustkit import load_scb_json_stat, plot_quantile_trend, quantile_trend_dispersion
+
+df = load_scb_json_stat("some_scb_table.json")
+
+# A real SCB quirk this loader does NOT try to guess automatically:
+# category labels can change meaning over time (e.g. Sweden's oldest
+# working-age bracket was labeled "65-66 år" through 2022 and
+# "65-68 år" from 2023, following a pension-age reform). Merge such
+# cases explicitly:
+df = load_scb_json_stat(
+    "some_scb_table.json",
+    rename_categories={"ålder": {"65–68 år": "65–66 år"}},
+)
+
+# Once reshaped to a wide table with q1/median/q3 columns:
+plot_quantile_trend(wide_df, x_col="år", q1_col="q1", median_col="median", q3_col="q3")
+quantile_trend_dispersion(wide_df, x_col="år", q1_col="q1", median_col="median", q3_col="q3")
+```
+
+This is the "quantiles are already given" case. A complementary case
+-- reconstructing approximate individual-level data from aggregated
+group means, for when only summary statistics (not quantiles) are
+available -- is planned as a follow-up (`robustkit.quantiles.reconstruct`).
+
+See `examples/quantiles_tutorial.py` for a complete walkthrough.
 
 ## Feature pairing (information)
 

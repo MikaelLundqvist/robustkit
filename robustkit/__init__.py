@@ -35,6 +35,8 @@ from .benchmark.robustness_map import feature_robustness_report, plot_feature_ro
 from .report.dispersion import iqr, dispersion_ratio, dispersion_by_bin
 from .report.visualize_analyst import plot_analyst_view
 from .report.visualize_publisher import plot_publisher_view
+from .quantiles.io import load_scb_json_stat
+from .quantiles.trend import prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
 
 __all__ = [
     "fit_huber_trend",
@@ -78,6 +80,10 @@ __all__ = [
     "dispersion_by_bin",
     "plot_analyst_view",
     "plot_publisher_view",
+    "load_scb_json_stat",
+    "prepare_quantile_trend",
+    "plot_quantile_trend",
+    "quantile_trend_dispersion",
 ]
 
 __version__ = "0.0.1"
