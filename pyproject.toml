@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robustkit"
-version = "0.0.1"
+version = "0.5.0"
 description = "Practical tools for robust analysis of a single continuous relationship: trend fitting, stability checks, influence diagnostics, and bootstrap uncertainty."
 readme = "README.md"
 license = { file = "LICENSE" }
