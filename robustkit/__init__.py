@@ -16,7 +16,7 @@ Modules:
 from .core.trend import fit_huber_trend, fit_tukey_trend, fit_ols_trend, predict_trend, trend_derivative
 from .core.stability import model_stability_pct
 from .core.diagnostics import cooks_diagnostic, cook_impact
-from .core.uncertainty import bootstrap_band, bca_bootstrap_ci
+from .core.uncertainty import bootstrap_band, bca_bootstrap_ci, bca_bootstrap_ci_by_index
 from .core.consistency import check_row_integrity, compare_row_sets
 from .core.goodness_of_fit import goodness_of_fit, compare_polynomial_degrees
 from .segmentation.hierarchy import hierarchical_segment, segment_sizes
@@ -30,11 +30,13 @@ from .information.conditional_mi import conditional_mutual_information
 from .information.communication import communication_score, rank_by_communication
 from .information.pairs import pair_redundancy, pair_synergy, rank_communicative_pairs
 from .common.quadrants import classify_quadrants
-from .benchmark.global_model import fit_huber_benchmark, segment_position_report
+from .benchmark.global_model import fit_huber_benchmark, segment_position_report, benchmark_predict, MIN_POINTS_FOR_CI
+from .benchmark.reporting import residual_summary, negative_deviation_report, benchmark_report_suite, export_benchmark_excel
 from .benchmark.robustness_map import feature_robustness_report, plot_feature_robustness
 from .report.dispersion import iqr, dispersion_ratio, dispersion_by_bin
 from .report.visualize_analyst import plot_analyst_view
 from .report.visualize_publisher import plot_publisher_view
+from .report.visualize_huber_iqr import plot_huber_iqr
 from .quantiles.io import load_scb_json_stat
 from .quantiles.trend import prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
 from .quantiles.reconstruct import (
@@ -55,6 +57,7 @@ __all__ = [
     "cook_impact",
     "bootstrap_band",
     "bca_bootstrap_ci",
+    "bca_bootstrap_ci_by_index",
     "check_row_integrity",
     "compare_row_sets",
     "goodness_of_fit",
@@ -79,6 +82,12 @@ __all__ = [
     "classify_quadrants",
     "fit_huber_benchmark",
     "segment_position_report",
+    "benchmark_predict",
+    "MIN_POINTS_FOR_CI",
+    "residual_summary",
+    "negative_deviation_report",
+    "benchmark_report_suite",
+    "export_benchmark_excel",
     "feature_robustness_report",
     "plot_feature_robustness",
     "iqr",
@@ -86,6 +95,7 @@ __all__ = [
     "dispersion_by_bin",
     "plot_analyst_view",
     "plot_publisher_view",
+    "plot_huber_iqr",
     "load_scb_json_stat",
     "prepare_quantile_trend",
     "plot_quantile_trend",

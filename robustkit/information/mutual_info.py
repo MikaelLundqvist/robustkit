@@ -50,7 +50,19 @@ def prepare_features(X):
         if pd.api.types.is_numeric_dtype(X[col]):
             X[col] = X[col].fillna(X[col].median())
         else:
-            X[col] = X[col].fillna("Missing").astype("category").cat.codes
+            col_data = X[col]
+            if isinstance(col_data.dtype, pd.CategoricalDtype):
+                # pandas raises on fillna() with a value that isn't
+                # already one of the Categorical's categories (e.g.
+                # "Cannot setitem on a Categorical with a new category
+                # ('Missing'), set the categories first" -- observed on
+                # OpenML's Boston Housing dataset, whose categorical
+                # columns arrive as pandas Categorical dtype). Convert
+                # to plain object dtype first, which has no such
+                # restriction; the final astype("category") below
+                # re-establishes a clean categorical encoding anyway.
+                col_data = col_data.astype(object)
+            X[col] = col_data.fillna("Missing").astype("category").cat.codes
     return X
 
 

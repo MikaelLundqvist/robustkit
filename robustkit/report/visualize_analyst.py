@@ -11,7 +11,7 @@ import numpy as np
 from ..core.uncertainty import bootstrap_band
 
 
-def plot_analyst_view(x, y, degree=2, n_boot=500, ci=95, show_points=True, ax=None, figsize=(10, 6)):
+def plot_analyst_view(x, y, degree=2, n_boot="auto", ci=95, show_points=True, ax=None, figsize=(10, 6)):
     """
     Plot the Huber-fitted trend with a bootstrap confidence band.
 
@@ -19,6 +19,10 @@ def plot_analyst_view(x, y, degree=2, n_boot=500, ci=95, show_points=True, ax=No
     in the *estimate*, not dispersion in the population. Contrast with
     plot_publisher_view.report's IQR band, which reflects real spread
     and does not shrink with more data.
+
+    n_boot: "auto" (default) scales bootstrap iterations down for
+        large datasets -- see bootstrap_band's docstring. Pass an
+        explicit integer to opt out.
 
     Returns the bootstrap_band() result dict for further inspection.
     """

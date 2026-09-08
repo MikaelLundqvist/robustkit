@@ -20,11 +20,23 @@ consistency checks), `robustkit.segmentation` (hierarchical grouping,
 per-segment analysis), `robustkit.information` (mutual-information
 feature ranking, quadrant classification, pairwise redundancy/synergy
 scoring), `robustkit.benchmark` (global-trend segment comparison,
-Robustness Map), `robustkit.report` (analyst vs. publisher views,
-dispersion measures), and `robustkit.quantiles` (generic JSON-stat
-loading, published-quantile-trend visualization, and lognormal-
-calibrated reconstruction of individual-level data from aggregated
-summaries) are stable and tested.
+model-agnostic custom benchmarks, residual/deviation reporting, Excel
+export, Robustness Map), `robustkit.report` (analyst vs. publisher
+views, dispersion measures), and `robustkit.quantiles` (generic
+JSON-stat loading, published-quantile-trend visualization, and
+lognormal-calibrated reconstruction of individual-level data from
+aggregated summaries) are stable and tested.
+
+**Recent fixes from real-dataset validation:**
+- `rank_features`/`quadrant_report`/`rank_communicative_pairs` no
+  longer crash on pandas `Categorical` columns containing missing
+  values (found via OpenML's Boston Housing dataset).
+- `bootstrap_band` (and `plot_analyst_view`, which uses it) now
+  defaults to `n_boot="auto"`, scaling iterations down for large
+  datasets since each iteration refits a full Huber model -- found to
+  become impractically slow at n_boot=200 on a ~54,000-row dataset.
+  Pass an explicit integer to opt out and always use exactly that many
+  iterations.
 
 **Note on `information_efficiency`:** values can exceed 1.0 for
 continuous features. `mutual_information` is estimated on the
@@ -155,25 +167,90 @@ See `examples/information_tutorial.py` for a complete walkthrough.
 
 ## Benchmarking against a global trend
 
-Compare each segment's observed outcome against what a single global
-robust trend predicts, with bootstrap uncertainty on the difference --
-answers "which groups deviate from the overall trend, and by how
-much?" rather than "how does the trend look overall?":
+Compare each segment's observed outcome against what a benchmark model
+predicts, with bootstrap uncertainty on the difference -- answers
+"which groups deviate from the overall trend, and by how much?" rather
+than "how does the trend look overall?":
 
 ```python
 from robustkit import segment_position_report
 
+# Default: a single global Huber trend on one continuous x
 report = segment_position_report(
     df, segment_col="department", x_col="age", y_col="salary",
 )
-#   segment    n  observed_median  expected_median  difference  ci_lower  ci_upper
-#   Finance  176        48339.70         47799.82      539.88    202.15   1031.01
-#        HR  174        45718.84         46647.39     -928.55  -1293.26   -580.36
-#        IT  250        47226.50         47126.91       99.59   -117.56    510.81
+#   segment    n  observed_median  expected_median  difference  ci_lower  ci_upper  ci_available
+#   Finance  176        48339.70         47799.82      539.88    202.15   1031.01          True
+#        HR  174        45718.84         46647.39     -928.55  -1293.26   -580.36          True
+#        IT  250        47226.50         47126.91       99.59   -117.56    510.81          True
 ```
 
 A segment's confidence interval crossing zero means no clear deviation
 from the benchmark; HR and Finance above don't cross zero, IT does.
+
+**Custom, model-agnostic benchmarks:** the default single-column Huber
+trend can be replaced with any richer model -- e.g. one using age,
+age-squared, job level, overtime status, and a reference cluster
+together, rather than a single x. Provide any object exposing
+`predict(dataframe) -> array`:
+
+```python
+report = segment_position_report(
+    df, segment_col="department", y_col="salary", benchmark_fit=my_richer_model,
+)
+```
+
+`segment_position_report` never inspects what the model uses
+internally -- it only calls `predict()`.
+
+**Small segments:** groups with fewer than `MIN_POINTS_FOR_CI` (default
+20) observations still get `observed_median` / `expected_median` /
+`difference`, but `ci_lower` / `ci_upper` are `NaN` and
+`ci_available` is `False` -- a BCa bootstrap confidence interval (which
+relies on a jackknife step) is not attempted for populations that
+small, since it can fail outright or become statistically meaningless.
+For segments at or above the threshold, the interval is a full BCa
+(bias-corrected and accelerated) bootstrap interval, via the same
+`bca_bootstrap_ci_by_index` primitive used elsewhere in the package --
+not a plain percentile bootstrap.
+
+## Reporting: residuals, individual deviations, batch runs, and Excel export
+
+Four functions built on the same benchmark contract as
+`segment_position_report`, for turning a benchmark into something a
+non-technical audience (or a spreadsheet) can use directly:
+
+```python
+from robustkit import (
+    residual_summary, negative_deviation_report,
+    benchmark_report_suite, export_benchmark_excel,
+)
+
+# Per-segment residual SHAPE (not just the median difference):
+residual_summary(df, segment_col="job_family", y_col="salary", x_col="age")
+#   segment    n  median_residual  mad_residual  p10_residual  p90_residual
+
+# Individuals furthest BELOW the benchmark, sorted most-negative-first --
+# material for a conversation, not an automatic flag:
+negative_deviation_report(
+    df, y_col="salary", x_col="age", top_n=50, id_cols=["employee_id"],
+)
+#   employee_id     actual   expected  difference
+
+# Run the same benchmark across several grouping columns at once,
+# reusing ONE fitted benchmark so results are directly comparable:
+reports = benchmark_report_suite(
+    df, group_columns=["gender", "job_family", "location"], y_col="salary", x_col="age",
+)
+# -> {"gender": DataFrame, "job_family": DataFrame, "location": DataFrame}
+
+# Every report as its own sheet in one workbook:
+export_benchmark_excel(reports, "salary_report.xlsx")
+```
+
+All four accept the same `benchmark_fit` / `x_col` contract as
+`segment_position_report` (default single-column Huber trend, or any
+custom model exposing `predict(dataframe)`).
 
 ## Robustness Map
 
@@ -234,6 +311,24 @@ unchanged -- confirmed by the package's own test suite.
 standalone for tabular reporting; `dispersion_by_bin(x, y, n_bins=10)`
 computes both across bins of a continuous x, e.g. to check whether
 dispersion (inequality) grows with age.
+
+## Combined model + spread view
+
+`plot_analyst_view` and `plot_publisher_view` each show one thing --
+estimation uncertainty, or population spread -- deliberately kept
+separate. `plot_huber_iqr` shows both together: a Huber trend curve
+overlaid with per-bin median + IQR error bars, plus an optional R²/MAE/
+RMSE box, matching the combined model-and-spread diagram style common
+in salary/wage analysis reporting:
+
+```python
+from robustkit import plot_huber_iqr
+
+result = plot_huber_iqr(df["age"], df["salary"], degree=2, bins=15)
+# result["grid"], result["huber_curve"], result["binned"]
+```
+
+`show_points` defaults to `False`, consistent with `plot_publisher_view`.
 
 ## Loading published quantile tables (SCB / JSON-stat)
 
