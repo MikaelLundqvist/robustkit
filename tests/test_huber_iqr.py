@@ -53,3 +53,64 @@ def test_plot_huber_iqr_respects_bins_parameter():
     assert len(result_5["binned"]) <= 5
     assert len(result_15["binned"]) <= 15
     assert len(result_15["binned"]) > len(result_5["binned"])
+
+
+def test_plot_huber_iqr_custom_title():
+    import matplotlib.pyplot as plt
+
+    age, salary = make_concave_data()
+    custom_title = "Alla roller - med övertidsersättning (1000 personer)"
+    plot_huber_iqr(age, salary, title=custom_title)
+    assert plt.gca().get_title() == custom_title
+    plt.close()
+
+
+def test_plot_huber_iqr_default_title_when_not_specified():
+    import matplotlib.pyplot as plt
+
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary)
+    assert plt.gca().get_title() == "Huber trend with per-bin median and IQR"
+    plt.close()
+
+
+def make_sparse_integer_age_data(n=200, seed=0):
+    """Small n with integer ages -- guarantees some exact ages have
+    very few observations, exercising the grouping='unique' NaN branch."""
+    rng = np.random.default_rng(seed)
+    age = rng.integers(22, 66, n).astype(float)
+    salary = 25000 + 900 * (age - 22) - 12 * (age - 22) ** 2 + rng.normal(0, 1200, n)
+    return age, salary
+
+
+def test_plot_huber_iqr_unique_grouping_matches_exact_x_values():
+    age, salary = make_sparse_integer_age_data()
+    result = plot_huber_iqr(age, salary, grouping="unique", min_n_for_iqr=5)
+
+    assert set(result["binned"]["x_center"]) <= set(age)
+
+
+def test_plot_huber_iqr_unique_grouping_nan_for_sparse_n():
+    age, salary = make_sparse_integer_age_data()
+    result = plot_huber_iqr(age, salary, grouping="unique", min_n_for_iqr=5)
+
+    binned = result["binned"]
+    sparse = binned[binned["n"] < 5]
+    dense = binned[binned["n"] >= 5]
+
+    assert len(sparse) > 0 and len(dense) > 0  # sanity: this dataset should have both
+    assert sparse["q1"].isna().all() and sparse["q3"].isna().all()
+    assert dense["q1"].notna().all() and dense["q3"].notna().all()
+
+
+def test_plot_huber_iqr_bin_grouping_never_produces_nan():
+    age, salary = make_sparse_integer_age_data()
+    result = plot_huber_iqr(age, salary, grouping="bin", bins=10)
+    assert result["binned"]["q1"].notna().all()
+    assert result["binned"]["q3"].notna().all()
+
+
+def test_plot_huber_iqr_rejects_invalid_grouping():
+    age, salary = make_concave_data()
+    with pytest.raises(ValueError):
+        plot_huber_iqr(age, salary, grouping="bogus")

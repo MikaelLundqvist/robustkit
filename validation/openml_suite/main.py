@@ -27,6 +27,7 @@ from .run_segmentation import run_segmentation_module
 from .run_information import run_information_module
 from .run_benchmark import run_benchmark_module
 from .run_report import run_report_module
+from .run_segment_awareness import run_segment_awareness_module
 
 warnings.filterwarnings("ignore")
 
@@ -59,8 +60,9 @@ def run_all(datasets=None):
         x, y = run_core_module(df, cfg["x_col"], cfg["y_col"])
         run_segmentation_module(df, cfg["x_col"], cfg["y_col"], cfg["segment_col"])
         run_information_module(df, cfg["y_col"], cfg["feature_cols"])
-        run_benchmark_module(df, cfg["x_col"], cfg["y_col"], cfg["segment_col"], cfg["feature_cols"])
+        run_benchmark_module(df, cfg["x_col"], cfg["y_col"], cfg["segment_col"], cfg["feature_cols"], cfg.get("hierarchy_cols"))
         run_report_module(x, y)
+        run_segment_awareness_module(df, cfg["x_col"], cfg["y_col"], cfg.get("hierarchy_cols"))
 
     section("VALIDATION RUN COMPLETE")
 

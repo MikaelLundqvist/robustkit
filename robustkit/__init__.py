@@ -37,6 +37,7 @@ from .report.dispersion import iqr, dispersion_ratio, dispersion_by_bin
 from .report.visualize_analyst import plot_analyst_view
 from .report.visualize_publisher import plot_publisher_view
 from .report.visualize_huber_iqr import plot_huber_iqr
+from .segment_awareness.reports import segment_stability_report, segment_benchmark_report, mad_outlier_report, export_outlier_pdf
 from .quantiles.io import load_scb_json_stat
 from .quantiles.trend import prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
 from .quantiles.reconstruct import (
@@ -96,6 +97,10 @@ __all__ = [
     "plot_analyst_view",
     "plot_publisher_view",
     "plot_huber_iqr",
+    "segment_stability_report",
+    "segment_benchmark_report",
+    "mad_outlier_report",
+    "export_outlier_pdf",
     "load_scb_json_stat",
     "prepare_quantile_trend",
     "plot_quantile_trend",

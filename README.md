@@ -22,10 +22,13 @@ feature ranking, quadrant classification, pairwise redundancy/synergy
 scoring), `robustkit.benchmark` (global-trend segment comparison,
 model-agnostic custom benchmarks, residual/deviation reporting, Excel
 export, Robustness Map), `robustkit.report` (analyst vs. publisher
-views, dispersion measures), and `robustkit.quantiles` (generic
-JSON-stat loading, published-quantile-trend visualization, and
-lognormal-calibrated reconstruction of individual-level data from
-aggregated summaries) are stable and tested.
+views, dispersion measures, combined Huber+IQR view),
+`robustkit.quantiles` (generic JSON-stat loading, published-quantile-
+trend visualization, and lognormal-calibrated reconstruction of
+individual-level data from aggregated summaries), and
+`robustkit.segment_awareness` (automatic hierarchical segmentation +
+analysis, no manual hierarchy construction required) are stable and
+tested.
 
 **Recent fixes from real-dataset validation:**
 - `rank_features`/`quadrant_report`/`rank_communicative_pairs` no
@@ -312,6 +315,85 @@ standalone for tabular reporting; `dispersion_by_bin(x, y, n_bins=10)`
 computes both across bins of a continuous x, e.g. to check whether
 dispersion (inequality) grows with age.
 
+## Segment awareness: automatic hierarchical grouping + analysis
+
+`segment_stability_report` and `segment_benchmark_report` build the
+hierarchical segmentation automatically from a flat, most-specific-
+first list of columns, then run an existing analysis within the
+result -- no separate `hierarchical_segment(...)` + `apply_by_segment(...)`
+preparation step required:
+
+```python
+from robustkit import segment_stability_report, segment_benchmark_report
+
+# hierarchy built automatically: [JobFamily, Level, OT] -> [Level, OT] -> [OT] -> ALL
+report = segment_stability_report(
+    df, x_col="age", y_col="salary",
+    segment_cols=["JobFamily", "Level", "OT"], min_size=20,
+)
+
+report = segment_benchmark_report(
+    df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"],
+    x_col="age", min_size=20,  # or benchmark_fit=my_custom_model
+)
+```
+
+Both add a `segment_level` column showing which tier of the hierarchy
+each reported segment actually landed on (0 = finest), so a fallback
+to a coarser grouping is visible rather than silent. These are pure
+convenience wrappers -- identical results to building the hierarchy
+by hand with `hierarchical_segment` and calling `apply_by_segment` /
+`segment_position_report` directly.
+
+`mad_outlier_report` flags individuals whose residual is an outlier
+relative to their OWN segment's typical spread (MAD), not the whole
+population -- built on the same automatic hierarchical segmentation as
+above, so even someone in a small segment is compared against a
+sensibly-sized reference group rather than an irrelevant one:
+
+```python
+from robustkit import mad_outlier_report
+
+report = mad_outlier_report(
+    df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age",
+    min_size=20, k=3.0, direction="negative", id_cols=["employee_id"],
+)
+#   employee_id     actual   expected   residual  residual_pct    segment  segment_level  segment_mad  threshold  flagged
+```
+
+`direction`: `"negative"` (default -- flag underperformance relative
+to the benchmark), `"positive"`, or `"two_sided"`. Flagging compares
+each residual to `k` MADs from its *own segment's* median residual
+(not literally zero), so a segment the benchmark is systematically
+biased for doesn't get every member flagged just for that bias.
+Segments with zero MAD (a degenerate case, usually a tiny segment
+where every residual happens to match) are treated as having an
+infinite threshold rather than flagging everyone in them.
+
+`export_outlier_pdf` renders one chart per segment -- built from the
+same segmentation and flagging as `mad_outlier_report` -- as a
+one-page-per-segment PDF, for visual verification alongside the
+numeric report:
+
+```python
+from robustkit import export_outlier_pdf
+
+export_outlier_pdf(
+    df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age",
+    path="outliers.pdf", min_size=20, k=3.0, id_cols=["employee_id"],
+)
+```
+
+Each page plots every observation in that segment, the benchmark's
+expected values (the exact same values used for flagging, not a
+separately re-fit curve), and flagged outliers marked distinctly.
+Segments with fewer than `min_points_to_plot` (default 5) observations
+are skipped in the PDF -- a chart with a handful of points isn't
+meaningfully verifiable -- but still appear in `mad_outlier_report`'s
+numeric output. The idea: a numeric flag and a visual confirmation are
+two independent checks, and agreement between them is stronger
+evidence than either alone.
+
 ## Combined model + spread view
 
 `plot_analyst_view` and `plot_publisher_view` each show one thing --
@@ -329,6 +411,33 @@ result = plot_huber_iqr(df["age"], df["salary"], degree=2, bins=15)
 ```
 
 `show_points` defaults to `False`, consistent with `plot_publisher_view`.
+
+**Two grouping strategies:** `grouping="bin"` (default) uses quantile-
+based binning for stable estimates even in small populations.
+`grouping="unique"` instead groups by each EXACT x value (e.g. every
+individual age in years) -- matching a workbook-style `groupby(x)`
+aggregation -- and, when a given x value has fewer than
+`min_n_for_iqr` (default 5) observations, omits its IQR error bar
+entirely rather than showing an unreliable one:
+
+**Caveat, found via validation against a real dataset:** `grouping="unique"`
+only makes sense for x values with natural repetition (e.g. integer
+ages) -- for a genuinely continuous, high-precision measurement (e.g.
+carat weight to several decimal places), nearly every x value is
+unique, so almost nothing meets `min_n_for_iqr` and the result shows
+no IQR bars at all. Use `grouping="bin"` (the default) for
+high-precision continuous x; reserve `grouping="unique"` for x values
+that naturally repeat.
+
+```python
+plot_huber_iqr(
+    df["age"], df["salary"], grouping="unique", min_n_for_iqr=5,
+)
+```
+
+The absence of an error bar at a given age is itself information --
+it signals the sample at that exact value is too small to say
+anything about spread, not just a plotting simplification.
 
 ## Loading published quantile tables (SCB / JSON-stat)
 

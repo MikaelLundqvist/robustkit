@@ -23,6 +23,7 @@ DATASETS = [
         "y_col": "SalePrice",
         "segment_col": "Neighborhood",
         "feature_cols": ["GrLivArea", "OverallQual", "YearBuilt", "TotalBsmtSF", "GarageCars"],
+        "hierarchy_cols": ["Neighborhood", "OverallQual"],
     },
     {
         "name": "abalone",
@@ -32,6 +33,7 @@ DATASETS = [
         "y_col": "Class_number_of_rings",
         "segment_col": "Sex",
         "feature_cols": ["Length", "Diameter", "Height", "Whole_weight", "Shell_weight"],
+        "hierarchy_cols": ["Sex"],
     },
     {
         "name": "wine-quality-red",
@@ -41,6 +43,7 @@ DATASETS = [
         "y_col": "class",
         "segment_col": None,
         "feature_cols": ["alcohol", "volatile_acidity", "sulphates", "citric_acid", "pH"],
+        "hierarchy_cols": None,
     },
     {
         "name": "autoMpg",
@@ -50,6 +53,7 @@ DATASETS = [
         "y_col": "class",
         "segment_col": "origin",
         "feature_cols": ["horsepower", "weight", "displacement", "acceleration"],
+        "hierarchy_cols": ["origin", "cylinders"],
     },
     {
         # Included specifically to independently cross-check earlier
@@ -63,11 +67,13 @@ DATASETS = [
         "y_col": "MEDV",
         "segment_col": None,
         "feature_cols": ["CRIM", "ZN", "INDUS", "CHAS", "NOX", "RM", "AGE", "DIS", "RAD", "TAX", "PTRATIO", "B", "LSTAT"],
+        "hierarchy_cols": None,
     },
     {
         # Large n (~54000), strongly right-skewed price -- a good
         # stress test for scale and for the report module's
-        # analyst/publisher-view distinction.
+        # analyst/publisher-view distinction. cut/color/clarity gives
+        # a natural three-level hierarchy for segment_awareness.
         "name": "diamonds",
         "openml_name": "diamonds",
         "openml_version": 1,
@@ -75,6 +81,7 @@ DATASETS = [
         "y_col": "price",
         "segment_col": "cut",
         "feature_cols": ["carat", "depth", "table"],
+        "hierarchy_cols": ["cut", "color", "clarity"],
     },
 ]
 
