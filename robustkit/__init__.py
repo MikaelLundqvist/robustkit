@@ -31,7 +31,7 @@ from .information.communication import communication_score, rank_by_communicatio
 from .information.pairs import pair_redundancy, pair_synergy, rank_communicative_pairs
 from .common.quadrants import classify_quadrants
 from .benchmark.global_model import fit_huber_benchmark, segment_position_report, benchmark_predict, MIN_POINTS_FOR_CI
-from .benchmark.reporting import residual_summary, negative_deviation_report, benchmark_report_suite, export_benchmark_excel, export_benchmark_excel_no_deps
+from .benchmark.reporting import residual_summary, deviation_report, benchmark_report_suite, export_benchmark_excel, export_benchmark_excel_no_deps
 from .benchmark.robustness_map import feature_robustness_report, plot_feature_robustness
 from .report.dispersion import iqr, dispersion_ratio, dispersion_by_bin
 from .report.visualize_analyst import plot_analyst_view
@@ -41,7 +41,7 @@ from .segment_awareness.reports import (
     segment_stability_report, segment_benchmark_report, mad_outlier_report, export_outlier_pdf,
     segment_benchmark_drilldown_report, mad_outlier_drilldown_report,
 )
-from .quantiles.io import load_scb_json_stat
+from .quantiles.io import load_json_stat
 from .quantiles.trend import prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
 from .quantiles.reconstruct import (
     expand_aggregated_group, expand_aggregated_table, check_reconstruction_quality,
@@ -90,7 +90,7 @@ __all__ = [
     "benchmark_predict",
     "MIN_POINTS_FOR_CI",
     "residual_summary",
-    "negative_deviation_report",
+    "deviation_report",
     "benchmark_report_suite",
     "export_benchmark_excel",
     "export_benchmark_excel_no_deps",
@@ -108,7 +108,7 @@ __all__ = [
     "export_outlier_pdf",
     "segment_benchmark_drilldown_report",
     "mad_outlier_drilldown_report",
-    "load_scb_json_stat",
+    "load_json_stat",
     "prepare_quantile_trend",
     "plot_quantile_trend",
     "quantile_trend_dispersion",

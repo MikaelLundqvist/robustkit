@@ -31,7 +31,7 @@ from robustkit import (
     expand_aggregated_group_flat, expand_aggregated_group_borrowed_dispersion,
     expand_aggregated_table_flat, expand_aggregated_table_borrowed_dispersion,
     compare_reconstruction_methods,
-    load_scb_json_stat, fit_huber_trend, predict_trend,
+    load_json_stat, fit_huber_trend, predict_trend,
 )
 
 from ..openml_suite.common import section, safe_run
@@ -217,7 +217,7 @@ def run_real_data_validation():
         return
 
     def load_real_table():
-        df = load_scb_json_stat(quartiles_path)
+        df = load_json_stat(quartiles_path)
         df["år"] = df["år"].astype(int)
         content_map = {
             "Anställda tjänstemän, privat sektor (SLP)": "n",

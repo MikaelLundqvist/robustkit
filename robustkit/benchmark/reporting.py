@@ -62,29 +62,43 @@ def residual_summary(df, segment_col, y_col, benchmark_fit=None, x_col=None, deg
     return pd.DataFrame(rows).sort_values("segment").reset_index(drop=True)
 
 
-def negative_deviation_report(df, y_col, benchmark_fit=None, x_col=None, degree=2, top_n=50, id_cols=None):
+def deviation_report(df, y_col, benchmark_fit=None, x_col=None, degree=2, top_n=50,
+                      direction="negative", id_cols=None):
     """
-    Identify the individuals with the largest NEGATIVE deviation from
-    a benchmark model -- those furthest below what the benchmark
-    predicts, sorted from most negative.
+    Identify the individuals with the largest deviation from a
+    benchmark model, sorted by magnitude.
 
     Intended as underlying material for a conversation (e.g. between
     HR and employee representatives), not as an automatic flag that
-    something is wrong: a large negative deviation is a starting point
-    for a conversation, not a conclusion on its own.
+    something is wrong: a large deviation is a starting point for a
+    conversation, not a conclusion on its own.
+
+    direction: "negative" (default -- furthest BELOW the benchmark,
+        sorted most-negative-first; the typical HR/union use case),
+        "positive" (furthest ABOVE, sorted most-positive-first), or
+        "two_sided" (largest absolute deviation in either direction,
+        sorted by |residual| descending).
 
     id_cols: columns to include so each row can be identified (e.g. an
         employee ID or name column). If omitted, the DataFrame's index
         is included as "row_id" instead -- a bare list of
-        actual/expected/difference numbers with no way to identify who
+        actual/expected/residual numbers with no way to identify who
         they belong to is rarely useful, so some identifier is always
         included.
+
+    Returns top_n rows with actual, expected, and residual
+    (actual - expected) -- "residual" at this individual level,
+    matching mad_outlier_report's convention; contrast with
+    segment_position_report's "difference" at the segment level.
     """
+    if direction not in ("negative", "positive", "two_sided"):
+        raise ValueError(f"direction must be 'negative', 'positive', or 'two_sided', got {direction!r}")
+
     benchmark_fit = _resolve_benchmark(df, y_col, benchmark_fit, x_col, degree)
 
     y = df[y_col].to_numpy(dtype=float)
     expected = benchmark_predict(benchmark_fit, df, x_col=x_col)
-    difference = y - expected
+    residual = y - expected
 
     if id_cols:
         result = df[id_cols].copy().reset_index(drop=True)
@@ -93,13 +107,20 @@ def negative_deviation_report(df, y_col, benchmark_fit=None, x_col=None, degree=
 
     result["actual"] = y
     result["expected"] = expected
-    result["difference"] = difference
+    result["residual"] = residual
 
-    return result.sort_values("difference").head(top_n).reset_index(drop=True)
+    if direction == "negative":
+        result = result.sort_values("residual")
+    elif direction == "positive":
+        result = result.sort_values("residual", ascending=False)
+    else:
+        result = result.reindex(result["residual"].abs().sort_values(ascending=False).index)
+
+    return result.head(top_n).reset_index(drop=True)
 
 
 def benchmark_report_suite(df, group_columns, y_col, benchmark_fit=None, x_col=None,
-                            degree=2, n_boot=500, ci=95, seed=0):
+                            degree=2, n_boot="auto", ci=95, seed=0):
     """
     Run segment_position_report independently for each column in
     group_columns (e.g. ["Gender", "JobFamily", "Location", ...]),

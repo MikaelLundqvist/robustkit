@@ -24,7 +24,7 @@ def prepare_quantile_trend(df, x_col, q1_col, median_col, q3_col):
     return trend
 
 
-def plot_quantile_trend(df, x_col, q1_col, median_col, q3_col, show_points=False, ax=None, figsize=(10, 6)):
+def plot_quantile_trend(df, x_col, q1_col, median_col, q3_col, show_points=False, title=None, ax=None, figsize=(10, 6)):
     """
     Plot an already-published median + IQR band over an ordered x
     (typically year). Visually similar to
@@ -37,6 +37,7 @@ def plot_quantile_trend(df, x_col, q1_col, median_col, q3_col, show_points=False
     in addition to the band -- off by default, matching the same
     "don't imply individual-level data is present" caution as
     plot_publisher_view.
+    title: optional custom title; defaults to a generic one if omitted.
 
     Returns the prepared, sorted quantile DataFrame.
     """
@@ -58,7 +59,7 @@ def plot_quantile_trend(df, x_col, q1_col, median_col, q3_col, show_points=False
         for col, marker in (("q1", "v"), ("median", "o"), ("q3", "^")):
             ax.scatter(trend[x_col], trend[col], s=20, color="darkorange", marker=marker, zorder=4)
 
-    ax.set_title("Published quantile trend")
+    ax.set_title(title if title is not None else "Published quantile trend")
     ax.set_xlabel(x_col)
     ax.legend(loc="best")
     ax.grid(True, alpha=0.3)

@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from robustkit import load_scb_json_stat, plot_quantile_trend, quantile_trend_dispersion
+from robustkit import load_json_stat, plot_quantile_trend, quantile_trend_dispersion
 
 
 def make_example_json_stat_file(path):
@@ -78,7 +78,7 @@ def main():
         # 1. Load the JSON-stat file generically
         # ------------------------------------------------------------
         print("=== 1. Loading a JSON-stat table ===")
-        df = load_scb_json_stat(path)
+        df = load_json_stat(path)
         df["år"] = df["år"].astype(int)
         print(f"Loaded {len(df)} rows, columns: {list(df.columns)}")
         print(df.head(3).to_string(index=False))

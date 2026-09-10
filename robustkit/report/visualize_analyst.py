@@ -11,7 +11,7 @@ import numpy as np
 from ..core.uncertainty import bootstrap_band
 
 
-def plot_analyst_view(x, y, degree=2, n_boot="auto", ci=95, show_points=True, ax=None, figsize=(10, 6)):
+def plot_analyst_view(x, y, degree=2, n_boot="auto", ci=95, show_points=True, title=None, ax=None, figsize=(10, 6)):
     """
     Plot the Huber-fitted trend with a bootstrap confidence band.
 
@@ -23,6 +23,7 @@ def plot_analyst_view(x, y, degree=2, n_boot="auto", ci=95, show_points=True, ax
     n_boot: "auto" (default) scales bootstrap iterations down for
         large datasets -- see bootstrap_band's docstring. Pass an
         explicit integer to opt out.
+    title: optional custom title; defaults to a generic one if omitted.
 
     Returns the bootstrap_band() result dict for further inspection.
     """
@@ -46,7 +47,7 @@ def plot_analyst_view(x, y, degree=2, n_boot="auto", ci=95, show_points=True, ax
         color="steelblue", alpha=0.2, label=f"{ci}% bootstrap CI", zorder=2,
     )
 
-    ax.set_title("Analyst view: trend estimate with confidence band")
+    ax.set_title(title if title is not None else "Analyst view: trend estimate with confidence band")
     ax.legend(loc="best")
     ax.grid(True, alpha=0.3)
 

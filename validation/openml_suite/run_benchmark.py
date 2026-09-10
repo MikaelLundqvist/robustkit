@@ -1,7 +1,7 @@
 """
 Validation runner for robustkit.benchmark: segment_position_report,
 feature_robustness_report, and the Fase B reporting layer (residual_summary,
-negative_deviation_report, benchmark_report_suite, export_benchmark_excel).
+deviation_report, benchmark_report_suite, export_benchmark_excel).
 
 Deliberately does NOT pre-filter small segments before calling
 segment_position_report -- that used to mask the MIN_POINTS_FOR_CI fix
@@ -57,15 +57,15 @@ def run_benchmark_module(df, x_col, y_col, segment_col, feature_cols, hierarchy_
             if rs is not None:
                 print(rs.to_string(index=False))
 
-            # ---- Fase B: negative_deviation_report ----
+            # ---- Fase B: deviation_report ----
             ndr = safe_run(
-                "negative_deviation_report",
-                lambda: rk.negative_deviation_report(sub, y_col=y_col, x_col=x_col, top_n=10),
+                "deviation_report",
+                lambda: rk.deviation_report(sub, y_col=y_col, x_col=x_col, top_n=10),
             )
             if ndr is not None:
                 print(ndr.to_string(index=False))
     else:
-        print("  (skipped segment_position_report / residual_summary / negative_deviation_report "
+        print("  (skipped segment_position_report / residual_summary / deviation_report "
               "-- no segment column defined for this dataset)")
 
     # ---- Fase B: benchmark_report_suite + export_benchmark_excel ----

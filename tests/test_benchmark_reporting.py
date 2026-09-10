@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from robustkit import (
-    residual_summary, negative_deviation_report, benchmark_report_suite, export_benchmark_excel,
+    residual_summary, deviation_report, benchmark_report_suite, export_benchmark_excel,
     fit_huber_benchmark,
 )
 
@@ -49,30 +49,49 @@ def test_residual_summary_requires_x_col_or_benchmark_fit():
 
 
 # ---------------------------------------------------------------------------
-# negative_deviation_report (GAP #2)
+# deviation_report (GAP #2)
 # ---------------------------------------------------------------------------
 
-def test_negative_deviation_report_sorted_ascending():
+def test_deviation_report_sorted_ascending_by_default():
     df = make_gender_gap_df()
-    ndr = negative_deviation_report(df, y_col="salary", x_col="age", top_n=20, id_cols=["employee_id", "gender"])
+    ndr = deviation_report(df, y_col="salary", x_col="age", top_n=20, id_cols=["employee_id", "gender"])
 
     assert len(ndr) == 20
-    assert (ndr["difference"].diff().dropna() >= 0).all()
-    assert set(ndr.columns) >= {"employee_id", "gender", "actual", "expected", "difference"}
+    assert (ndr["residual"].diff().dropna() >= 0).all()
+    assert set(ndr.columns) >= {"employee_id", "gender", "actual", "expected", "residual"}
 
 
-def test_negative_deviation_report_reflects_injected_gap():
+def test_deviation_report_direction_positive_sorted_descending():
+    df = make_gender_gap_df()
+    ndr = deviation_report(df, y_col="salary", x_col="age", top_n=20, direction="positive")
+    assert (ndr["residual"].diff().dropna() <= 0).all()
+
+
+def test_deviation_report_direction_two_sided_sorted_by_magnitude():
+    df = make_gender_gap_df()
+    ndr = deviation_report(df, y_col="salary", x_col="age", top_n=20, direction="two_sided")
+    abs_residuals = ndr["residual"].abs()
+    assert (abs_residuals.diff().dropna() <= 0).all()
+
+
+def test_deviation_report_rejects_invalid_direction():
+    df = make_gender_gap_df()
+    with pytest.raises(ValueError):
+        deviation_report(df, y_col="salary", x_col="age", direction="sideways")
+
+
+def test_deviation_report_reflects_injected_gap():
     """With a real injected gender gap, the most negative deviations
     should be disproportionately female."""
     df = make_gender_gap_df()
-    ndr = negative_deviation_report(df, y_col="salary", x_col="age", top_n=50, id_cols=["gender"])
+    ndr = deviation_report(df, y_col="salary", x_col="age", top_n=50, id_cols=["gender"])
     female_share = (ndr["gender"] == "F").mean()
     assert female_share > 0.7  # should be heavily skewed toward F given the injected -1500 gap
 
 
-def test_negative_deviation_report_falls_back_to_row_id_without_id_cols():
+def test_deviation_report_falls_back_to_row_id_without_id_cols():
     df = make_gender_gap_df()
-    ndr = negative_deviation_report(df, y_col="salary", x_col="age", top_n=5)
+    ndr = deviation_report(df, y_col="salary", x_col="age", top_n=5)
     assert "row_id" in ndr.columns
     assert len(ndr) == 5
 

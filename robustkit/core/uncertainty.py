@@ -64,7 +64,7 @@ def bootstrap_band(x, y, degree=2, n_boot="auto", ci=95, n_points=50, seed=0):
     }
 
 
-def bca_bootstrap_ci_by_index(n, statistic_fn, n_boot=1000, ci=95, seed=0):
+def bca_bootstrap_ci_by_index(n, statistic_fn, n_boot="auto", ci=95, seed=0):
     """
     Bias-corrected and accelerated (BCa) bootstrap confidence interval
     for an arbitrary statistic, expressed as a function of RESAMPLED
@@ -82,9 +82,17 @@ def bca_bootstrap_ci_by_index(n, statistic_fn, n_boot=1000, ci=95, seed=0):
             sub = df.iloc[idx]
             return float(np.median(sub["y"] - my_model.predict(sub)))
 
+    n_boot: "auto" (default) scales bootstrap iterations down for
+        large n via the same schedule as bootstrap_band (see
+        _resolve_n_boot) -- each bootstrap iteration here also
+        includes an O(n) jackknife pass for acceleration, so this
+        matters even for statistics that are individually cheap to
+        compute. Pass an explicit integer to opt out.
+
     bca_bootstrap_ci itself is just a thin wrapper around this:
     statistic_fn(idx) = original_statistic_fn(x[idx], y[idx]).
     """
+    n_boot = _resolve_n_boot(n, n_boot)
     rng = np.random.default_rng(seed)
     idx_full = np.arange(n)
 
@@ -135,12 +143,15 @@ def bca_bootstrap_ci_by_index(n, statistic_fn, n_boot=1000, ci=95, seed=0):
     }
 
 
-def bca_bootstrap_ci(x, y, statistic_fn, n_boot=1000, ci=95, seed=0):
+def bca_bootstrap_ci(x, y, statistic_fn, n_boot="auto", ci=95, seed=0):
     """
     Bias-corrected and accelerated (BCa) bootstrap confidence interval
     for an arbitrary statistic computed from (x, y).
 
     statistic_fn: callable(x, y) -> float
+
+    n_boot: "auto" (default) scales iterations down for large n -- see
+        bca_bootstrap_ci_by_index. Pass an explicit integer to opt out.
 
     Returns the point estimate, the BCa interval bounds, and the
     bias-correction (z0) and acceleration (a) parameters, in case you

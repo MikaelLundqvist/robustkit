@@ -18,7 +18,7 @@ _QUADRANT_COLORS = {
 }
 
 
-def plot_feature_space(df=None, target=None, ranking=None, annotate=True, figsize=(10, 7), ax=None):
+def plot_feature_space(df=None, target=None, ranking=None, annotate=True, figsize=(10, 6), ax=None):
     """
     Scatter plot of features in information space: x = information
     efficiency, y = mutual information, bubble size = entropy (bits),

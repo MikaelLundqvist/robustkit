@@ -239,7 +239,7 @@ non-technical audience (or a spreadsheet) can use directly:
 
 ```python
 from robustkit import (
-    residual_summary, negative_deviation_report,
+    residual_summary, deviation_report,
     benchmark_report_suite, export_benchmark_excel,
 )
 
@@ -247,12 +247,15 @@ from robustkit import (
 residual_summary(df, segment_col="job_family", y_col="salary", x_col="age")
 #   segment    n  median_residual  mad_residual  p10_residual  p90_residual
 
-# Individuals furthest BELOW the benchmark, sorted most-negative-first --
+# Individuals furthest from the benchmark, sorted by residual --
 # material for a conversation, not an automatic flag:
-negative_deviation_report(
+deviation_report(
     df, y_col="salary", x_col="age", top_n=50, id_cols=["employee_id"],
 )
-#   employee_id     actual   expected  difference
+#   employee_id     actual   expected  residual
+
+# direction="negative" (default, furthest below), "positive" (furthest
+# above), or "two_sided" (largest |residual| either direction).
 
 # Run the same benchmark across several grouping columns at once,
 # reusing ONE fitted benchmark so results are directly comparable:
@@ -340,6 +343,10 @@ This distinction matters in practice: with 20x more data (same
 underlying distribution), the analyst view's confidence band roughly
 halves in width, while the publisher view's IQR band stays essentially
 unchanged -- confirmed by the package's own test suite.
+
+Both accept an optional `title=None` to override the default title
+(e.g. `plot_analyst_view(x, y, title="Q3 salary review")`), as does
+`plot_quantile_trend`.
 
 `dispersion_ratio(y)` -- (Q3-Q1)/median -- and `iqr(y)` are available
 standalone for tabular reporting; `dispersion_by_bin(x, y, n_bins=10)`
@@ -537,16 +544,16 @@ other national statistics agencies -- avoiding the fragility of
 parsing metadata out of column-name strings in a wide CSV export.
 
 ```python
-from robustkit import load_scb_json_stat, plot_quantile_trend, quantile_trend_dispersion
+from robustkit import load_json_stat, plot_quantile_trend, quantile_trend_dispersion
 
-df = load_scb_json_stat("some_scb_table.json")
+df = load_json_stat("some_scb_table.json")
 
 # A real SCB quirk this loader does NOT try to guess automatically:
 # category labels can change meaning over time (e.g. Sweden's oldest
 # working-age bracket was labeled "65-66 år" through 2022 and
 # "65-68 år" from 2023, following a pension-age reform). Merge such
 # cases explicitly:
-df = load_scb_json_stat(
+df = load_json_stat(
     "some_scb_table.json",
     rename_categories={"ålder": {"65–68 år": "65–66 år"}},
 )
@@ -692,6 +699,43 @@ and are converted before being used anywhere in this package.
   actually changes anything.
 - **OLS is a reference point, not the enemy.** Comparing robust fits
   against OLS is how you know whether robustness mattered at all.
+
+## Naming conventions
+
+A few parameter/column names look similar across the package but mean
+different things -- documented here explicitly so the difference reads
+as intentional, not as an inconsistency to "fix":
+
+- **`residual` vs. `difference`:** `residual` is an INDIVIDUAL-level
+  quantity (`actual - expected` for one row) -- used by
+  `mad_outlier_report`, `mad_outlier_drilldown_report`, and
+  `deviation_report`. `difference` is a SEGMENT/GROUP-level quantity
+  (typically the median residual within a group) -- used by
+  `segment_position_report`, `segment_benchmark_report`,
+  `segment_benchmark_drilldown_report`, and `benchmark_report_suite`.
+- **`target` vs. `y_col`:** `robustkit.information` uses `target` for
+  the column being explained, since it works with arbitrary features
+  (not necessarily a continuous regression outcome).
+  `robustkit.benchmark`, `robustkit.segment_awareness`, and
+  `robustkit.quantiles` use `y_col`, since they specifically model a
+  continuous `y` as a function of `x`.
+- **`segment_cols` vs. `group_columns`:** `segment_cols` (throughout
+  `robustkit.segment_awareness`) is an ORDERED, most-specific-first
+  list used to build a fallback HIERARCHY (see `hierarchical_segment`).
+  `group_columns` (`benchmark_report_suite`) is a FLAT list of
+  independent groupings, run separately with no hierarchy or fallback
+  between them. Different structure, different name on purpose.
+- **`min_size` vs. `min_points` vs. `min_stratum_size` vs.
+  `min_group_size`:** all mean "minimum group size," but at different
+  stages: `min_size` (`hierarchical_segment` and everything built on
+  it) gates whether a hierarchy LEVEL gets created at all;
+  `min_points` (`apply_by_segment`) gates whether an already-built
+  segment gets ANALYZED; `min_stratum_size`
+  (`conditional_mutual_information`) and `min_group_size`
+  (`communication_score`, `rank_by_communication`) are specific to
+  those `robustkit.information` calculations. Kept separate rather
+  than unified to one name, since collapsing them would obscure which
+  stage of a pipeline each threshold actually applies to.
 
 ## License
 

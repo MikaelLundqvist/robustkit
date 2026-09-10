@@ -101,7 +101,7 @@ def feature_robustness_report(df, target, features=None, degree=2,
     return classified.sort_values("cook_impact_pct", ascending=False).reset_index(drop=True)
 
 
-def plot_feature_robustness(df=None, target=None, report=None, annotate=True, figsize=(10, 7), ax=None):
+def plot_feature_robustness(df=None, target=None, report=None, annotate=True, figsize=(10, 6), ax=None):
     """
     Scatter plot of features in robustness space: x = model stability
     spread (%), y = Cook-impact (%), colored by robustness quadrant.

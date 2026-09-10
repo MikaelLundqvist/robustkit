@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from robustkit import load_scb_json_stat, plot_quantile_trend, quantile_trend_dispersion
+from robustkit import load_json_stat, plot_quantile_trend, quantile_trend_dispersion
 from robustkit.quantiles.trend import prepare_quantile_trend
 
 from ..openml_suite.common import section, safe_run
@@ -62,7 +62,7 @@ def run_trend_against_real_file():
         return
 
     def load_and_reshape():
-        df = load_scb_json_stat(quartiles_path)
+        df = load_json_stat(quartiles_path)
         df["år"] = df["år"].astype(int)
 
         quantile_map = {

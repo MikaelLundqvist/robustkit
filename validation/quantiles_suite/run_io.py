@@ -1,7 +1,7 @@
 """
 Validation for robustkit.quantiles.io -- generic JSON-stat loading.
 
-Each check names the specific claim (about load_scb_json_stat's
+Each check names the specific claim (about load_json_stat's
 behavior) it verifies, in the spirit of requirements-based testing:
 know WHAT you're checking before you check it, not just "run it and
 see if it crashes."
@@ -11,7 +11,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from robustkit import load_scb_json_stat
+from robustkit import load_json_stat
 
 from ..openml_suite.common import section, safe_run
 
@@ -63,7 +63,7 @@ def run_io_edge_cases():
         path = _make_minimal_fixture(tmp_path)
 
         def check_shape():
-            df = load_scb_json_stat(path)
+            df = load_json_stat(path)
             assert df.shape == (12, 4), f"expected (12,4), got {df.shape}"
             assert set(df.columns) == {"kön", "grupp", "år", "value"}
             return df
@@ -77,7 +77,7 @@ def run_io_edge_cases():
         path2 = _make_minimal_fixture(tmp_path, include_status=True)
 
         def check_missing():
-            df2 = load_scb_json_stat(path2)
+            df2 = load_json_stat(path2)
             n_missing = int(df2["value"].isna().sum())
             assert n_missing == 1, f"expected 1 missing value, got {n_missing}"
             return n_missing
@@ -88,7 +88,7 @@ def run_io_edge_cases():
 
         # CLAIM: rename_categories merges the given categories.
         def check_rename():
-            df3 = load_scb_json_stat(path, rename_categories={"grupp": {"Grupp B": "Grupp A"}})
+            df3 = load_json_stat(path, rename_categories={"grupp": {"Grupp B": "Grupp A"}})
             assert set(df3["grupp"]) == {"Grupp A"}
             assert (df3["grupp"] == "Grupp A").sum() == 12
             return df3
@@ -108,7 +108,7 @@ def run_io_edge_cases():
 
         def check_size_mismatch_raises():
             try:
-                load_scb_json_stat(bad_path)
+                load_json_stat(bad_path)
             except ValueError:
                 return True
             raise AssertionError("Expected ValueError on dimension-size mismatch, none raised")
@@ -128,7 +128,7 @@ def run_io_against_real_files():
         return
 
     def check_quartiles():
-        df1 = load_scb_json_stat(quartiles_path)
+        df1 = load_json_stat(quartiles_path)
         assert df1.shape == (360, 5), f"expected (360,5), got {df1.shape}"
         assert df1["value"].isna().sum() == 0
         return df1
@@ -138,7 +138,7 @@ def run_io_against_real_files():
         print(f"         shape={df1.shape}, 0 missing (as expected for this table)")
 
     def check_age():
-        df2 = load_scb_json_stat(age_path)
+        df2 = load_json_stat(age_path)
         assert df2.shape == (432, 5), f"expected (432,5), got {df2.shape}"
         n_missing = int(df2["value"].isna().sum())
         assert n_missing == 37, f"expected 37 missing, got {n_missing}"
@@ -150,7 +150,7 @@ def run_io_against_real_files():
               f"(as expected: confidentiality-suppressed cells)")
 
         def check_pension_age_merge():
-            df2_renamed = load_scb_json_stat(age_path, rename_categories={"ålder": {"65–68 år": "65–66 år"}})
+            df2_renamed = load_json_stat(age_path, rename_categories={"ålder": {"65–68 år": "65–66 år"}})
             merged_count = int((df2_renamed["ålder"] == "65–66 år").sum())
             original_6566 = int((df2["ålder"] == "65–66 år").sum())
             original_6568 = int((df2["ålder"] == "65–68 år").sum())

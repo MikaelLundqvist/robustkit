@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 
-def load_scb_json_stat(path, rename_categories=None):
+def load_json_stat(path, rename_categories=None):
     """
     Load an SCB JSON-stat export into a tidy long-format DataFrame:
     one row per (dimension combination), with one column per dimension

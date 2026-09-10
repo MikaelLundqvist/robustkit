@@ -79,7 +79,7 @@ def benchmark_predict(benchmark_fit, data, x_col=None):
 
 
 def segment_position_report(df, segment_col, y_col, benchmark_fit=None, x_col=None,
-                             degree=2, n_boot=500, ci=95, seed=0):
+                             degree=2, n_boot="auto", ci=95, seed=0):
     """
     Compare each segment's outcome against a benchmark model.
 

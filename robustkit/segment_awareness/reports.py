@@ -87,7 +87,7 @@ def segment_stability_report(df, x_col, y_col, segment_cols, min_size=20, min_po
 
 
 def segment_benchmark_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None,
-                              degree=2, min_size=20, n_boot=500, ci=95, seed=0):
+                              degree=2, min_size=20, n_boot="auto", ci=95, seed=0):
     """
     Build a hierarchical segmentation from segment_cols automatically,
     then run segment_position_report within the resulting segments.
@@ -145,7 +145,7 @@ def mad_outlier_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, 
         or "two_sided".
     id_cols: columns identifying each individual in the output (e.g.
         an employee ID). Falls back to the DataFrame's index as
-        "row_id" if omitted, matching negative_deviation_report's
+        "row_id" if omitted, matching deviation_report's
         convention.
 
     Segments where MAD is exactly 0 (a degenerate segment where every
@@ -330,7 +330,7 @@ def _label_group_name(name):
 
 
 def segment_benchmark_drilldown_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None,
-                                        degree=2, min_size=20, n_boot=500, ci=95, seed=0):
+                                        degree=2, min_size=20, n_boot="auto", ci=95, seed=0):
     """
     Report segment_position_report-style results at EVERY level of the
     hierarchy simultaneously, without exclusive assignment.

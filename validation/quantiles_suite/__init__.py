@@ -4,7 +4,7 @@ quantiles_suite -- rigorous validation of robustkit.quantiles
 SCB JSON-stat exports.
 
 Structure mirrors robustkit.quantiles itself:
-    run_io.py           -- load_scb_json_stat
+    run_io.py           -- load_json_stat
     run_trend.py         -- prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
     run_reconstruct.py   -- expand_aggregated_group/_table, check_reconstruction_quality,
                             and the mean-only (flat / borrowed_dispersion) variants

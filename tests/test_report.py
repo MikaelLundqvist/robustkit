@@ -91,3 +91,23 @@ def test_publisher_view_show_points_defaults_to_false():
     import inspect
     sig = inspect.signature(plot_publisher_view)
     assert sig.parameters["show_points"].default is False
+
+
+def test_plot_analyst_view_custom_title():
+    import matplotlib.pyplot as plt
+    rng = np.random.default_rng(0)
+    x = rng.uniform(20, 60, 200)
+    y = 1000 + 50 * x + rng.normal(0, 300, 200)
+    plot_analyst_view(x, y, n_boot=100, title="Custom title")
+    assert plt.gca().get_title() == "Custom title"
+    plt.close()
+
+
+def test_plot_publisher_view_custom_title():
+    import matplotlib.pyplot as plt
+    rng = np.random.default_rng(0)
+    x = rng.uniform(20, 60, 200)
+    y = 1000 + 50 * x + rng.normal(0, 300, 200)
+    plot_publisher_view(x, y, title="Custom title")
+    assert plt.gca().get_title() == "Custom title"
+    plt.close()

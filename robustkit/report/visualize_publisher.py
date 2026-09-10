@@ -16,13 +16,14 @@ import numpy as np
 from .dispersion import dispersion_by_bin
 
 
-def plot_publisher_view(x, y, n_bins=10, show_points=False, ax=None, figsize=(10, 6)):
+def plot_publisher_view(x, y, n_bins=10, show_points=False, title=None, ax=None, figsize=(10, 6)):
     """
     Plot median + IQR band across quantile bins of x.
 
     show_points: off by default. Set to True explicitly to overlay
     individual observations -- appropriate for internal analysis, not
     for publishing sensitive data like individual salaries.
+    title: optional custom title; defaults to a generic one if omitted.
 
     Returns the dispersion_by_bin() result DataFrame for further
     inspection or tabular reporting.
@@ -47,7 +48,7 @@ def plot_publisher_view(x, y, n_bins=10, show_points=False, ax=None, figsize=(10
         color="darkorange", alpha=0.25, label="Interquartile range (Q1-Q3)", zorder=2,
     )
 
-    ax.set_title("Publisher view: median and population spread")
+    ax.set_title(title if title is not None else "Publisher view: median and population spread")
     ax.legend(loc="best")
     ax.grid(True, alpha=0.3)
 
