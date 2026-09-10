@@ -17,7 +17,7 @@ from .core.trend import fit_huber_trend, fit_tukey_trend, fit_ols_trend, predict
 from .core.stability import model_stability_pct
 from .core.diagnostics import cooks_diagnostic, cook_impact
 from .core.uncertainty import bootstrap_band, bca_bootstrap_ci, bca_bootstrap_ci_by_index
-from .core.consistency import check_row_integrity, compare_row_sets
+from .core.consistency import check_row_integrity, compare_row_sets, segment_consistency_report
 from .core.goodness_of_fit import goodness_of_fit, compare_polynomial_degrees
 from .segmentation.hierarchy import hierarchical_segment, segment_sizes
 from .segmentation.apply import apply_by_segment
@@ -31,13 +31,16 @@ from .information.communication import communication_score, rank_by_communicatio
 from .information.pairs import pair_redundancy, pair_synergy, rank_communicative_pairs
 from .common.quadrants import classify_quadrants
 from .benchmark.global_model import fit_huber_benchmark, segment_position_report, benchmark_predict, MIN_POINTS_FOR_CI
-from .benchmark.reporting import residual_summary, negative_deviation_report, benchmark_report_suite, export_benchmark_excel
+from .benchmark.reporting import residual_summary, negative_deviation_report, benchmark_report_suite, export_benchmark_excel, export_benchmark_excel_no_deps
 from .benchmark.robustness_map import feature_robustness_report, plot_feature_robustness
 from .report.dispersion import iqr, dispersion_ratio, dispersion_by_bin
 from .report.visualize_analyst import plot_analyst_view
 from .report.visualize_publisher import plot_publisher_view
 from .report.visualize_huber_iqr import plot_huber_iqr
-from .segment_awareness.reports import segment_stability_report, segment_benchmark_report, mad_outlier_report, export_outlier_pdf
+from .segment_awareness.reports import (
+    segment_stability_report, segment_benchmark_report, mad_outlier_report, export_outlier_pdf,
+    segment_benchmark_drilldown_report, mad_outlier_drilldown_report,
+)
 from .quantiles.io import load_scb_json_stat
 from .quantiles.trend import prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
 from .quantiles.reconstruct import (
@@ -61,6 +64,7 @@ __all__ = [
     "bca_bootstrap_ci_by_index",
     "check_row_integrity",
     "compare_row_sets",
+    "segment_consistency_report",
     "goodness_of_fit",
     "compare_polynomial_degrees",
     "hierarchical_segment",
@@ -89,6 +93,7 @@ __all__ = [
     "negative_deviation_report",
     "benchmark_report_suite",
     "export_benchmark_excel",
+    "export_benchmark_excel_no_deps",
     "feature_robustness_report",
     "plot_feature_robustness",
     "iqr",
@@ -101,6 +106,8 @@ __all__ = [
     "segment_benchmark_report",
     "mad_outlier_report",
     "export_outlier_pdf",
+    "segment_benchmark_drilldown_report",
+    "mad_outlier_drilldown_report",
     "load_scb_json_stat",
     "prepare_quantile_trend",
     "plot_quantile_trend",

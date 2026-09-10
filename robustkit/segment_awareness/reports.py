@@ -1,16 +1,34 @@
 """
 Automatic hierarchical segmentation + analysis, in one call.
 
-Both functions here take an ordered list of grouping columns
-(segment_cols) and build the same kind of fallback hierarchy
-hierarchical_segment already supports -- falling back from most
-specific to least specific by dropping columns from the FRONT of the
-list first:
+Two complementary families of functions live here, answering two
+different questions:
+
+  EXCLUSIVE (segment_stability_report, segment_benchmark_report,
+  mad_outlier_report): each individual is assigned to exactly ONE
+  segment -- their most specific grouping that meets min_size, falling
+  back to a broader one otherwise. Answers "what is the single most
+  relevant reference population for THIS individual?"
+
+  DRILLDOWN (segment_benchmark_drilldown_report,
+  mad_outlier_drilldown_report): every level of the hierarchy is
+  reported independently and WITHOUT exclusive assignment -- the same
+  individual can appear in multiple rows (e.g. once in a
+  JobFamily x Level x OT row, and again in the broader Level x OT
+  row), whenever both groupings independently meet min_size. Answers
+  "what does every granularity level look like on its own?"
+
+Both families build the same kind of fallback hierarchy from a flat,
+most-specific-first list of columns -- falling back from most specific
+to least specific by dropping columns from the FRONT of the list
+first:
 
     [JobFamily, Level, OvertimeStatus]
         -> [Level, OvertimeStatus]
         -> [OvertimeStatus]
-        -> "ALL" (hierarchical_segment's own catch-all)
+        -> "ALL" (hierarchical_segment's own catch-all -- EXCLUSIVE
+                  family only; drilldown has no catch-all, since it
+                  doesn't need one)
 
 This ordering matches the intuition that the columns are listed most-
 specific-first: the analysis prefers the finest grouping it can
@@ -24,6 +42,7 @@ import pandas as pd
 from ..segmentation.hierarchy import hierarchical_segment
 from ..segmentation.apply import apply_by_segment
 from ..core.stability import model_stability_pct
+from ..core.uncertainty import bca_bootstrap_ci_by_index
 from ..benchmark.global_model import segment_position_report
 
 
@@ -294,3 +313,158 @@ def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None,
             plt.close(fig)
 
     return path
+
+
+# ---------------------------------------------------------------------------
+# DRILLDOWN family: every hierarchy level reported independently, no
+# exclusive assignment. See module docstring for how this differs from
+# the EXCLUSIVE family above.
+# ---------------------------------------------------------------------------
+
+def _label_group_name(name):
+    """groupby() gives a scalar for a single column, a tuple for
+    multiple -- normalize both to a single underscore-joined string."""
+    if isinstance(name, tuple):
+        return "_".join(str(x) for x in name)
+    return str(name)
+
+
+def segment_benchmark_drilldown_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None,
+                                        degree=2, min_size=20, n_boot=500, ci=95, seed=0):
+    """
+    Report segment_position_report-style results at EVERY level of the
+    hierarchy simultaneously, without exclusive assignment.
+
+    The same individual can appear in multiple rows here -- once in a
+    JobFamily x Level x OT row, and again in the broader Level x OT
+    row, if both groupings independently meet min_size. This answers
+    "what does every granularity level look like on its own?" For the
+    complementary question -- "what is the single most relevant
+    reference population for THIS individual?" -- use
+    segment_benchmark_report instead.
+
+    Returns one row per (qualifying group, hierarchy level), with a
+    segment_level column (0 = finest) disambiguating rows that might
+    otherwise share a segment label across levels.
+    """
+    if benchmark_fit is None:
+        if x_col is None:
+            raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
+        from ..benchmark.global_model import fit_huber_benchmark
+        benchmark_fit = fit_huber_benchmark(
+            df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
+        )
+
+    from ..benchmark.global_model import benchmark_predict
+
+    hierarchy = _build_hierarchy(list(segment_cols))
+    rows = []
+
+    for level, cols in enumerate(hierarchy):
+        for name, sub in df.groupby(cols, observed=True):
+            if len(sub) < min_size:
+                continue
+
+            label = _label_group_name(name)
+            y = sub[y_col].to_numpy(dtype=float)
+            expected = np.asarray(benchmark_predict(benchmark_fit, sub, x_col=x_col), dtype=float)
+            n = len(sub)
+
+            def stat_by_index(idx, _sub=sub, _fit=benchmark_fit):
+                s = _sub.iloc[idx]
+                y_s = s[y_col].to_numpy(dtype=float)
+                exp_s = benchmark_predict(_fit, s, x_col=x_col)
+                return float(np.median(y_s - exp_s))
+
+            ci_result = bca_bootstrap_ci_by_index(n, stat_by_index, n_boot=n_boot, ci=ci, seed=seed)
+
+            rows.append({
+                "segment": label,
+                "segment_level": level,
+                "n": n,
+                "observed_median": float(np.median(y)),
+                "expected_median": float(np.median(expected)),
+                "difference": ci_result["estimate"],
+                "ci_lower": ci_result["lower"],
+                "ci_upper": ci_result["upper"],
+            })
+
+    return pd.DataFrame(rows).sort_values(["segment_level", "segment"]).reset_index(drop=True)
+
+
+def mad_outlier_drilldown_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, degree=2,
+                                  min_size=20, k=3.0, direction="negative", id_cols=None):
+    """
+    Flag MAD outliers at EVERY level of the hierarchy independently,
+    without exclusive assignment -- the same individual can appear
+    (and be flagged, or not) multiple times across levels, once per
+    qualifying grouping they belong to.
+
+    Complementary to mad_outlier_report, which assigns each individual
+    to exactly one (their most specific) segment. See the module
+    docstring for when to use which.
+
+    Same flagging logic, k, and direction semantics as
+    mad_outlier_report -- see that function's docstring for details.
+    """
+    if direction not in ("negative", "positive", "two_sided"):
+        raise ValueError(f"direction must be 'negative', 'positive', or 'two_sided', got {direction!r}")
+
+    benchmark_fit_resolved = benchmark_fit
+    if benchmark_fit_resolved is None:
+        if x_col is None:
+            raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
+        from ..benchmark.global_model import fit_huber_benchmark
+        benchmark_fit_resolved = fit_huber_benchmark(
+            df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
+        )
+
+    from ..benchmark.global_model import benchmark_predict
+
+    hierarchy = _build_hierarchy(list(segment_cols))
+    blocks = []
+
+    for level, cols in enumerate(hierarchy):
+        for name, sub in df.groupby(cols, observed=True):
+            if len(sub) < min_size:
+                continue
+
+            label = _label_group_name(name)
+            y = sub[y_col].to_numpy(dtype=float)
+            expected = np.asarray(benchmark_predict(benchmark_fit_resolved, sub, x_col=x_col), dtype=float)
+            residual = y - expected
+            residual_pct = np.where(expected != 0, residual / expected * 100, np.nan)
+
+            median_residual = float(np.median(residual))
+            mad_val = float(1.4826 * np.median(np.abs(residual - median_residual)))
+            safe_mad = mad_val if mad_val > 0 else np.inf
+            z = (residual - median_residual) / safe_mad
+            threshold = k * mad_val
+
+            if direction == "negative":
+                flagged = z < -k
+            elif direction == "positive":
+                flagged = z > k
+            else:
+                flagged = np.abs(z) > k
+
+            if id_cols:
+                block = sub[id_cols].reset_index(drop=True)
+            else:
+                block = pd.DataFrame({"row_id": sub.index})
+
+            block["actual"] = y
+            block["expected"] = expected
+            block["residual"] = residual
+            block["residual_pct"] = residual_pct
+            block["segment"] = label
+            block["segment_level"] = level
+            block["segment_mad"] = mad_val
+            block["threshold"] = threshold
+            block["flagged"] = flagged
+
+            blocks.append(block)
+
+    if not blocks:
+        return pd.DataFrame()
+    return pd.concat(blocks, ignore_index=True)

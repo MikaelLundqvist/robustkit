@@ -133,10 +133,8 @@ def export_benchmark_excel(reports, path):
     Requires openpyxl (an optional dependency: `pip install
     robustkit[excel]`, or `pip install openpyxl` directly). In an
     offline/air-gapped environment where installing an extra package
-    isn't possible, use the DataFrames in `reports` directly (e.g.
-    write each to CSV instead) rather than this function -- every
-    other function in robustkit works without openpyxl installed at
-    all.
+    isn't possible, use export_benchmark_excel_no_deps instead, which
+    needs nothing beyond the Python standard library.
 
     Returns `path`, for convenient chaining.
     """
@@ -146,8 +144,7 @@ def export_benchmark_excel(reports, path):
         raise ImportError(
             "export_benchmark_excel requires openpyxl, which is not installed. "
             "Install it with `pip install openpyxl` (or `pip install robustkit[excel]`), "
-            "or, if that isn't possible in your environment, write each DataFrame in "
-            "`reports` to CSV directly instead."
+            "or use export_benchmark_excel_no_deps instead, which needs no extra packages."
         ) from exc
 
     seen = {}
@@ -161,5 +158,139 @@ def export_benchmark_excel(reports, path):
             else:
                 seen[sheet_name] = 0
             report_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+    return path
+
+
+def export_benchmark_excel_no_deps(reports, path):
+    """
+    Export a dict of {name: DataFrame} to a minimal but valid .xlsx
+    workbook, one sheet per entry, using ONLY the Python standard
+    library (zipfile + string templating of the OOXML format) --
+    no openpyxl or any other third-party dependency required.
+
+    Use this in offline/air-gapped environments where installing
+    openpyxl isn't possible; use export_benchmark_excel instead when
+    openpyxl IS available, since it's a more complete, better-tested
+    implementation of the Excel format (formatting, formulas, etc. --
+    none of which this minimal writer supports).
+
+    Cell values are written as numbers where they parse as one
+    (including turning a stray decimal comma into a decimal point),
+    and as inline text otherwise. NaN/Inf are written as text, since
+    Excel's native format has no representation for them. Sheet names
+    are cleaned of Excel-invalid characters and truncated to Excel's
+    31-character limit.
+
+    Returns `path`, for convenient chaining.
+    """
+    import html
+    import math
+    import re
+    import zipfile
+
+    def _clean_xml_text(value):
+        if value is None:
+            return ""
+        text = str(value)
+        text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", text)  # invalid XML control chars
+        return html.escape(text, quote=True)
+
+    def _clean_sheet_name(name):
+        invalid = ["\\", "/", "*", "?", ":", "[", "]"]
+        for ch in invalid:
+            name = name.replace(ch, "")
+        return name.strip()[:31]
+
+    def _col_letter(n):
+        result = ""
+        while n:
+            n, r = divmod(n - 1, 26)
+            result = chr(65 + r) + result
+        return result
+
+    def _write_cell(cell_ref, val):
+        try:
+            num = float(val.replace(",", ".")) if isinstance(val, str) else float(val)
+            if math.isnan(num) or math.isinf(num):
+                raise ValueError
+            return f'<c r="{cell_ref}"><v>{num}</v></c>'
+        except (TypeError, ValueError):
+            text = _clean_xml_text(val)
+            return f'<c r="{cell_ref}" t="inlineStr"><is><t>{text}</t></is></c>'
+
+    seen = {}
+    sheet_names = []
+    for name in reports:
+        candidate = _clean_sheet_name(str(name))
+        if candidate in seen:
+            seen[candidate] += 1
+            suffix = f"_{seen[candidate]}"
+            candidate = candidate[: 31 - len(suffix)] + suffix
+        else:
+            seen[candidate] = 0
+        sheet_names.append(candidate)
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        overrides = "".join(
+            f'    <Override PartName="/xl/worksheets/sheet{i}.xml" '
+            f'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>\n'
+            for i in range(1, len(reports) + 1)
+        )
+        z.writestr("[Content_Types].xml", f"""<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+    <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+    <Default Extension="xml" ContentType="application/xml"/>
+    <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+{overrides}</Types>
+""")
+
+        z.writestr("_rels/.rels", """<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>
+""")
+
+        sheet_entries = "".join(
+            f'        <sheet name="{_clean_xml_text(sn)}" sheetId="{i}" r:id="rId{i}"/>\n'
+            for i, sn in enumerate(sheet_names, start=1)
+        )
+        z.writestr("xl/workbook.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+    <sheets>
+{sheet_entries}    </sheets>
+</workbook>
+""")
+
+        rels = "".join(
+            f'    <Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>\n'
+            for i in range(1, len(reports) + 1)
+        )
+        z.writestr("xl/_rels/workbook.xml.rels", f"""<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+{rels}</Relationships>
+""")
+
+        for i, (_, df) in enumerate(reports.items(), start=1):
+            rows_xml = f'<row r="1">' + "".join(
+                f'<c r="{_col_letter(c)}1" t="inlineStr"><is><t>{_clean_xml_text(col)}</t></is></c>'
+                for c, col in enumerate(df.columns, start=1)
+            ) + "</row>"
+
+            for r_i, (_, row) in enumerate(df.iterrows(), start=2):
+                cells = "".join(
+                    _write_cell(f"{_col_letter(c_i)}{r_i}", val)
+                    for c_i, val in enumerate(row, start=1)
+                )
+                rows_xml += f'<row r="{r_i}">{cells}</row>'
+
+            dim = f"A1:{_col_letter(max(df.shape[1], 1))}{df.shape[0] + 1}"
+            z.writestr(f"xl/worksheets/sheet{i}.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <dimension ref="{dim}"/>
+    <sheetData>{rows_xml}</sheetData>
+</worksheet>
+""")
 
     return path

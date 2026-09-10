@@ -140,6 +140,20 @@ own. Only scalar values in the returned dict end up in the report
 table; segments below `min_points` are skipped rather than causing an
 error.
 
+**Sanity-checking a segmentation before trusting it:**
+`segment_consistency_report` runs a small battery of checks per
+segment -- does it meet the recommended minimum size, and does fitting
+a Huber trend on it use every row (robust methods don't need outliers
+pre-removed, so a silently dropped row usually means a missing x/y
+value slipped through, not intentional filtering):
+
+```python
+from robustkit import segment_consistency_report
+
+segment_consistency_report(df, segment_col="department", x_col="age", y_col="salary", min_size=20)
+#   segment  n_total  n_valid_xy  n_dropped_missing_xy  size_ok  fit_ok  fit_error
+```
+
 ## Feature ranking (information)
 
 Rank features by mutual information with a target, normalized by each
@@ -254,6 +268,23 @@ export_benchmark_excel(reports, "salary_report.xlsx")
 All four accept the same `benchmark_fit` / `x_col` contract as
 `segment_position_report` (default single-column Huber trend, or any
 custom model exposing `predict(dataframe)`).
+
+**Dependency-free Excel export:** `export_benchmark_excel` requires
+`openpyxl` (an optional dependency). In an offline/air-gapped
+environment where installing it isn't possible, use
+`export_benchmark_excel_no_deps` instead -- identical interface,
+implemented with only the Python standard library (writes valid
+`.xlsx` files via `zipfile` and OOXML templating directly, no
+third-party package required):
+
+```python
+from robustkit import export_benchmark_excel_no_deps
+
+export_benchmark_excel_no_deps(reports, "salary_report.xlsx")
+```
+
+Prefer `export_benchmark_excel` when `openpyxl` is available -- it's a
+more complete, better-tested implementation of the Excel format.
 
 ## Robustness Map
 
@@ -394,23 +425,80 @@ numeric output. The idea: a numeric flag and a visual confirmation are
 two independent checks, and agreement between them is stronger
 evidence than either alone.
 
+### Drilldown reports: every hierarchy level at once, without exclusive assignment
+
+`segment_stability_report`, `segment_benchmark_report`, and
+`mad_outlier_report` each assign every individual to exactly ONE
+segment (their most specific grouping meeting `min_size`). That
+answers "what is the single most relevant reference population for
+THIS individual?"
+
+`segment_benchmark_drilldown_report` and `mad_outlier_drilldown_report`
+answer a different question -- "what does every granularity level look
+like on its own?" -- by reporting EVERY level of the hierarchy
+independently, without exclusive assignment. The same individual can
+appear in multiple rows (e.g. once in a `JobFamily x Level x OT` row,
+and again in the broader `Level x OT` row), whenever both groupings
+independently meet `min_size`:
+
+```python
+from robustkit import segment_benchmark_drilldown_report, mad_outlier_drilldown_report
+
+segment_benchmark_drilldown_report(
+    df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age", min_size=20,
+)
+mad_outlier_drilldown_report(
+    df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age", k=3.0,
+)
+```
+
+Both add a `segment_level` column, and the sum of `n` across rows will
+exceed the population size -- that's the expected signature of
+overlap, not a bug. Use the exclusive functions when you need to route
+each individual to one home; use the drilldown functions when you want
+to see every level side by side.
+
 ## Combined model + spread view
 
 `plot_analyst_view` and `plot_publisher_view` each show one thing --
 estimation uncertainty, or population spread -- deliberately kept
-separate. `plot_huber_iqr` shows both together: a Huber trend curve
-overlaid with per-bin median + IQR error bars, plus an optional R²/MAE/
-RMSE box, matching the combined model-and-spread diagram style common
-in salary/wage analysis reporting:
+separate. `plot_huber_iqr` shows both together: one or more trend
+curves overlaid with median + IQR error bars, plus an optional
+residual-quality box, matching the combined model-and-spread diagram
+style common in salary/wage analysis reporting:
 
 ```python
 from robustkit import plot_huber_iqr
 
 result = plot_huber_iqr(df["age"], df["salary"], degree=2, bins=15)
-# result["grid"], result["huber_curve"], result["binned"]
+# result["grid"], result["huber"], result["binned"]
 ```
 
 `show_points` defaults to `False`, consistent with `plot_publisher_view`.
+
+**Multiple curves, bootstrap bands, and full style control:**
+
+```python
+plot_huber_iqr(
+    df["age"], df["salary"],
+    methods=("huber", "tukey", "ols", "median_ensemble"),  # overlay all four
+    show_bootstrap_band=True, bootstrap_levels=(95, 50),    # nested confidence bands
+    cap_style="manual",         # hand-drawn boxplot-style Q1/Q3 "hats" instead of matplotlib's default caps
+    residual_box_metric="mdape",  # MdAPE + IQR(resid) instead of R^2/MAE/RMSE
+    ylim="dynamic",              # y-limits set from the data (min*0.95, max*1.05)
+    style={
+        "huber_line": {"color": "red", "linewidth": 2, "linestyle": "-", "label": "Huber poly(2)"},
+        "iqr_color": "black", "cap_width": 0.15,
+    },
+)
+```
+
+`methods` selects which trend curve(s) to draw (`"tukey"` and
+`"median_ensemble"` -- the pointwise median of Huber/Tukey/OLS --
+require statsmodels). `style` overrides individual colors, line
+widths, and other visual details without needing to touch anything
+else; every new parameter here defaults to the original, simpler
+single-Huber-curve appearance, so existing calls are unaffected.
 
 **Two grouping strategies:** `grouping="bin"` (default) uses quantile-
 based binning for stable estimates even in small populations.

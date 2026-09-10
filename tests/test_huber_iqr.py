@@ -18,8 +18,8 @@ def test_plot_huber_iqr_returns_expected_structure():
     age, salary = make_concave_data()
     result = plot_huber_iqr(age, salary, degree=2, bins=10)
 
-    assert set(result.keys()) == {"grid", "huber_curve", "binned"}
-    assert len(result["grid"]) == len(result["huber_curve"]) == 200
+    assert set(result.keys()) == {"grid", "huber", "binned"}
+    assert len(result["grid"]) == len(result["huber"]) == 200
     assert (result["binned"]["q3"] >= result["binned"]["median"]).all()
     assert (result["binned"]["median"] >= result["binned"]["q1"]).all()
 
@@ -114,3 +114,84 @@ def test_plot_huber_iqr_rejects_invalid_grouping():
     age, salary = make_concave_data()
     with pytest.raises(ValueError):
         plot_huber_iqr(age, salary, grouping="bogus")
+
+
+# ---------------------------------------------------------------------------
+# Block 2: multi-curve, style, bootstrap band, manual caps, MdAPE box
+# ---------------------------------------------------------------------------
+
+def test_plot_huber_iqr_multi_curve_huber_ols():
+    """statsmodels-free subset of multi-curve support (tukey/median_ensemble need statsmodels)."""
+    age, salary = make_concave_data()
+    result = plot_huber_iqr(age, salary, methods=("huber", "ols"))
+    assert set(result.keys()) == {"grid", "huber", "ols", "binned"}
+    assert len(result["huber"]) == len(result["ols"]) == 200
+
+
+def test_plot_huber_iqr_show_bootstrap_band_single_level():
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, show_bootstrap_band=True, bootstrap_levels=(95,))
+    plt.close()
+
+
+def test_plot_huber_iqr_show_bootstrap_band_dual_level():
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, show_bootstrap_band=True, bootstrap_levels=(95, 50))
+    plt.close()
+
+
+def test_plot_huber_iqr_manual_cap_style_runs():
+    import matplotlib.pyplot as plt
+    age, salary = make_sparse_integer_age_data()
+    plot_huber_iqr(age, salary, cap_style="manual", grouping="unique", min_n_for_iqr=5)
+    plt.close()
+
+
+def test_plot_huber_iqr_mdape_residual_box():
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, residual_box_metric="mdape")
+    plt.close()
+
+
+def test_plot_huber_iqr_dynamic_ylim_sets_limits():
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, ylim="dynamic")
+    lo, hi = plt.gca().get_ylim()
+    assert lo < hi
+    plt.close()
+
+
+def test_plot_huber_iqr_style_override_applies():
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, methods=("huber",), style={"huber_line": {"color": "red", "linewidth": 3, "linestyle": "-", "label": "Huber poly(2)"}})
+    line = [l for l in plt.gca().get_lines() if l.get_label() == "Huber poly(2)"][0]
+    assert line.get_color() == "red"
+    assert line.get_linewidth() == 3
+    plt.close()
+
+
+def test_plot_huber_iqr_rejects_invalid_residual_box_metric():
+    age, salary = make_concave_data()
+    with pytest.raises(ValueError):
+        plot_huber_iqr(age, salary, residual_box_metric="bogus")
+
+
+def test_plot_huber_iqr_rejects_invalid_cap_style():
+    age, salary = make_concave_data()
+    with pytest.raises(ValueError):
+        plot_huber_iqr(age, salary, cap_style="bogus")
+
+
+def test_plot_huber_iqr_backward_compatible_defaults_unchanged():
+    """Regression: calling with only the original parameters must
+    behave exactly as before this block's changes."""
+    age, salary = make_concave_data()
+    result = plot_huber_iqr(age, salary, degree=2, bins=10)
+    fit = fit_huber_trend(age, salary, degree=2)
+    direct = predict_trend(fit, result["grid"])
+    assert np.allclose(result["huber"], direct)
