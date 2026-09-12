@@ -383,6 +383,26 @@ convenience wrappers -- identical results to building the hierarchy
 by hand with `hierarchical_segment` and calling `apply_by_segment` /
 `segment_position_report` directly.
 
+`segment_quality_report` combines several independent robustness
+measures into a single row per segment -- model stability, Cook's
+impact, MdAPE, and IQR of residuals -- so one table shows how
+trustworthy each segment's conclusion is, rather than cross-
+referencing several separate function calls by hand:
+
+```python
+from robustkit import segment_quality_report
+
+segment_quality_report(
+    df, x_col="age", y_col="salary", segment_cols=["JobFamily", "Level", "OT"], min_size=20,
+)
+#   segment  n  skipped  median_pct_diff  max_pct_diff  n_flagged  cook_impact_pct  mdape  iqr_resid  segment_level
+```
+
+Each measure is computed and error-handled independently -- if
+model stability fails (e.g. Tukey needs statsmodels, which may not be
+installed), Cook's impact, MdAPE, and IQR are still reported for that
+segment rather than the whole row failing.
+
 `mad_outlier_report` flags individuals whose residual is an outlier
 relative to their OWN segment's typical spread (MAD), not the whole
 population -- built on the same automatic hierarchical segmentation as
@@ -419,12 +439,25 @@ from robustkit import export_outlier_pdf
 export_outlier_pdf(
     df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age",
     path="outliers.pdf", min_size=20, k=3.0, id_cols=["employee_id"],
+    annotate_flagged_with="employee_id",  # optional: label flagged points directly
 )
 ```
 
+`mode="benchmark"` (default) plots the exact values used for flagging.
+`mode="local"` instead fits a fresh Huber trend within each segment
+alone -- often easier to read for "where does this person sit relative
+to their immediate colleagues?" Flagging always uses the benchmark
+residuals regardless of `mode`, so a point can visually sit close to
+the local curve yet still be flagged if the benchmark disagrees with
+the segment's own trend -- that gap is informative, not a rendering
+inconsistency.
+
 Each page plots every observation in that segment, the benchmark's
 expected values (the exact same values used for flagging, not a
-separately re-fit curve), and flagged outliers marked distinctly.
+separately re-fit curve), flagged outliers marked distinctly, and an
+info box (n, flagged count/percentage, the segment's MAD, and the
+flagging rule) so a reviewer can see *why* points are flagged directly
+from the chart, without cross-referencing the numeric report.
 Segments with fewer than `min_points_to_plot` (default 5) observations
 are skipped in the PDF -- a chart with a handful of points isn't
 meaningfully verifiable -- but still appear in `mad_outlier_report`'s
@@ -449,13 +482,19 @@ and again in the broader `Level x OT` row), whenever both groupings
 independently meet `min_size`:
 
 ```python
-from robustkit import segment_benchmark_drilldown_report, mad_outlier_drilldown_report
+from robustkit import (
+    segment_benchmark_drilldown_report, mad_outlier_drilldown_report,
+    segment_stability_drilldown_report, outlier_drilldown_summary,
+)
 
 segment_benchmark_drilldown_report(
     df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age", min_size=20,
 )
 mad_outlier_drilldown_report(
     df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age", k=3.0,
+)
+segment_stability_drilldown_report(
+    df, x_col="age", y_col="salary", segment_cols=["JobFamily", "Level", "OT"], min_size=20,
 )
 ```
 
@@ -464,6 +503,82 @@ exceed the population size -- that's the expected signature of
 overlap, not a bug. Use the exclusive functions when you need to route
 each individual to one home; use the drilldown functions when you want
 to see every level side by side.
+
+**A conclusion that survives multiple reference populations is more
+trustworthy than one that only holds under a single, narrow
+definition of "expected".** `outlier_drilldown_summary` counts how
+many hierarchy levels each individual was flagged on:
+
+```python
+drilldown = mad_outlier_drilldown_report(
+    df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age",
+    k=3.0, id_cols=["employee_id"],
+)
+outlier_drilldown_summary(drilldown, id_col="employee_id")
+#   employee_id  outlier_levels          levels
+```
+
+An individual flagged at every level (finest grouping AND every
+broader fallback) is a stronger candidate than one that only appears
+as an outlier under one specific, narrow segmentation -- a Cook's-
+distance-style robustness check, applied to the choice of reference
+population rather than to individual data points.
+
+### Reference Population Sensitivity: a fourth robustness axis
+
+`robustkit` already checks robustness against fitting method
+(Huber/Tukey/OLS, `core`), individual observations (Cook's impact,
+`core.diagnostics`), and segment granularity (the drilldown functions
+above). `dual_reference_outlier_report` adds a fourth axis: robustness
+against WHICH reference population an individual is compared to.
+
+```python
+from robustkit import dual_reference_outlier_report
+
+report = dual_reference_outlier_report(
+    df, y_col="salary", x_col="age", segment_cols=["JobFamily", "Level", "OT"],
+    min_size=20, k=3.0, id_cols=["employee_id"],
+)
+#   employee_id  ...  local_flagged  global_flagged  reference_type
+```
+
+Each individual's residual is computed against two different
+references simultaneously:
+- **local** -- their own segment's Huber trend, fit fresh on just that
+  segment. Answers "how does this person deviate from their immediate
+  colleagues?"
+- **global** -- the benchmark model (default single-column Huber, or
+  a custom multi-column model). Answers "how does this person deviate
+  from the organization's expected structure?"
+
+`reference_type` classifies each individual: **"A"** (outlier under
+both -- the strongest candidates, low regardless of how "expected" is
+defined), **"B"** (outlier locally only -- often a tightly-clustered
+segment where a modest dip stands out among close peers but not
+against the wider population), **"C"** (outlier globally only --
+often a whole segment trending low while each individual is typical
+within it), or **"D"** (neither -- the normal case).
+
+**A subtlety that matters for what "global" actually means:** the
+global reference's MAD/median is computed across the ENTIRE
+population, not re-centered per segment. If it were centered per
+segment, a segment uniformly shifted below the benchmark would have
+that shift silently absorbed by the per-segment median subtraction --
+nobody in it would ever register as a global outlier, no matter how
+far the whole segment sits from the benchmark, since everyone would
+share roughly the same "typical" residual for their segment. This was
+found by testing, not designed in from the start: an earlier version
+reused `mad_outlier_report`'s per-segment MAD for the "global" side
+and it could never produce a genuine Type C, because per-segment
+recentering makes "global" behave like a second "local" view. It's
+also worth knowing that if segment-level shifts are large relative to
+individual noise AND affect a large share of the population, the
+population-wide MAD naturally inflates to accommodate that variation
+-- so a single shifted segment competing against several
+similarly-large ones may not clear the threshold either; Type C shows
+up most clearly when one segment's shift is a real minority pattern
+against an otherwise-homogeneous majority, not when most segments
+already differ substantially from each other.
 
 ## Combined model + spread view
 
@@ -533,6 +648,46 @@ plot_huber_iqr(
 The absence of an error bar at a given age is itself information --
 it signals the sample at that exact value is too small to say
 anything about spread, not just a plotting simplification.
+
+**Per-segment PDF export:** `export_huber_iqr_pdf` renders one
+`plot_huber_iqr` chart per segment -- built from the same automatic
+hierarchical segmentation as the rest of `segment_awareness` -- as a
+one-page-per-segment PDF, suitable for sharing with the people each
+chart describes:
+
+```python
+from robustkit import export_huber_iqr_pdf
+
+export_huber_iqr_pdf(
+    df, x_col="age", y_col="salary", segment_cols=["JobFamily", "Level", "OT"],
+    path="segments.pdf", min_size=20,
+)
+```
+
+Domain-specific segment naming (e.g. translating an internal code like
+`"ENG_P3_Yes"` into a readable label such as "Engineers, level 3,
+overtime-eligible") stays entirely outside the package via an optional
+`title_fn(segment_name, info) -> str` callback, where `info` is
+`{"n", "segment_level"}`:
+
+```python
+def pretty_title(segment_code, info):
+    return f"{my_own_translation(segment_code)} (n={info['n']})"
+
+export_huber_iqr_pdf(..., title_fn=pretty_title)
+```
+
+`export_outlier_pdf` accepts the same `title_fn(segment_name, info)`
+callback for symmetry, with `info` there being `{"n", "n_flagged",
+"pct_flagged", "k", "segment_mad"}` -- useful if outlier review PDFs
+also need domain-specific titles, even though for many teams that PDF
+stays internal and doesn't need one. Both default to a generic title
+when `title_fn` is omitted, so existing calls are unaffected.
+
+All of `plot_huber_iqr`'s style parameters (`methods`,
+`show_bootstrap_band`, `cap_style`, `residual_box_metric`, `ylim`,
+`style`, ...) pass straight through `export_huber_iqr_pdf` to each
+segment's page.
 
 ## Loading published quantile tables (SCB / JSON-stat)
 

@@ -114,3 +114,40 @@ def test_export_outlier_pdf_works_with_custom_benchmark_model():
         )
         assert os.path.exists(path)
         assert os.path.getsize(path) > 1000
+
+
+def test_export_outlier_pdf_info_box_content():
+    pytest.importorskip("pypdf")
+    import pypdf
+
+    df = make_job_family_df_with_outliers()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "outliers.pdf")
+        export_outlier_pdf(
+            df, y_col="salary", segment_cols=["JobFamily", "P_niva", "OT"], x_col="age", path=path,
+            min_size=20, k=3.0, id_cols=["employee_id"], min_points_to_plot=5,
+        )
+        reader = pypdf.PdfReader(path)
+        page_text = reader.pages[0].extract_text()
+
+        assert "Flagged" in page_text
+        assert "MAD" in page_text
+        assert "Rule:" in page_text
+        assert "n =" in page_text
+
+
+def test_export_outlier_pdf_annotate_flagged_with_shows_ids():
+    pytest.importorskip("pypdf")
+    import pypdf
+
+    df = make_job_family_df_with_outliers()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "outliers.pdf")
+        export_outlier_pdf(
+            df, y_col="salary", segment_cols=["JobFamily", "P_niva", "OT"], x_col="age", path=path,
+            min_size=20, k=3.0, id_cols=["employee_id"], min_points_to_plot=5,
+            annotate_flagged_with="employee_id",
+        )
+        # Just confirm it runs without crashing and produces a valid, readable PDF
+        reader = pypdf.PdfReader(path)
+        assert len(reader.pages) > 0
