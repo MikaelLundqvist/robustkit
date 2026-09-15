@@ -882,7 +882,7 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
                           title_fn=None, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
                           methods=("huber",), show_bootstrap_band=False, bootstrap_levels=(95,),
                           n_boot="auto", cap_style="matplotlib", residual_box_metric="r2",
-                          ylim="auto", style=None, figsize=(10, 6)):
+                          ylim="auto", show_undersized_points=True, style=None, figsize=(10, 6)):
     """
     Render one plot_huber_iqr chart per segment -- built from the same
     automatic hierarchical segmentation as the rest of
@@ -907,10 +907,10 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
 
     All other parameters (degree, bins, grouping, min_n_for_iqr,
     methods, show_bootstrap_band, bootstrap_levels, n_boot, cap_style,
-    residual_box_metric, ylim, style, figsize) are passed straight
-    through to plot_huber_iqr for each segment's page -- see that
-    function's docstring for what they do and how to configure them
-    (e.g. to match an existing chart style exactly).
+    residual_box_metric, ylim, show_undersized_points, style, figsize)
+    are passed straight through to plot_huber_iqr for each segment's
+    page -- see that function's docstring for what they do and how to
+    configure them (e.g. to match an existing chart style exactly).
 
     Returns `path`.
     """
@@ -940,8 +940,8 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
                 x, y, degree=degree, bins=bins, grouping=grouping, min_n_for_iqr=min_n_for_iqr,
                 show_points=False, show_residual_box=True, residual_box_metric=residual_box_metric,
                 methods=methods, show_bootstrap_band=show_bootstrap_band, bootstrap_levels=bootstrap_levels,
-                n_boot=n_boot, cap_style=cap_style, ylim=ylim, style=style,
-                title=title, ax=ax, figsize=figsize,
+                n_boot=n_boot, cap_style=cap_style, ylim=ylim, show_undersized_points=show_undersized_points,
+                style=style, title=title, ax=ax, figsize=figsize,
             )
 
             fig.tight_layout()

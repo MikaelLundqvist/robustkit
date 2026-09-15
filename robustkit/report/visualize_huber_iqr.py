@@ -70,7 +70,8 @@ _DEFAULT_METHOD_STYLE = {
 }
 
 _DEFAULT_STYLE = {
-    "iqr_color": "darkorange",
+    "iqr_color": "darkorange",   # median marker color (and error-bar color, unless iqr_bar_color is set)
+    "iqr_bar_color": None,       # optional separate color for the Q1/Q3 error bars and caps; falls back to iqr_color
     "iqr_elinewidth": 1.5,
     "iqr_capsize": 4,            # used only when cap_style="matplotlib"
     "iqr_marker_size": None,     # None -> matplotlib default marker size for errorbar 'o'
@@ -133,7 +134,7 @@ def _median_ensemble_curve(x, y, degree, grid):
 def plot_huber_iqr(x, y, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
                     show_points=False, show_residual_box=True, residual_box_metric="r2",
                     methods=("huber",), show_bootstrap_band=False, bootstrap_levels=(95,),
-                    n_boot="auto", cap_style="matplotlib", ylim="auto",
+                    n_boot="auto", cap_style="matplotlib", ylim="auto", show_undersized_points=True,
                     style=None, title=None, ax=None, figsize=(10, 6)):
     """
     Plot one or more trend curves together with median + IQR error bars.
@@ -167,12 +168,23 @@ def plot_huber_iqr(x, y, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
         max*1.05, matching a common salary-chart convention that avoids
         curves touching the plot edges), or an explicit (lo, hi) tuple.
 
+    show_undersized_points: True (default) shows a hollow marker for
+        each x value (in grouping="unique") or bin with fewer than
+        min_n_for_iqr observations -- the median is still meaningful,
+        just without a spread estimate. Set to False to omit these
+        points from the chart entirely, e.g. for member-facing charts
+        where a lone point with no visible spread could be mistaken
+        for a confident estimate rather than a small-sample caveat.
+        Either way, these rows still appear in the returned `binned`
+        DataFrame (with q1/q3 as NaN) -- only the drawing is affected.
     style: dict overriding any of the default style values (colors,
         line widths, alphas, cap width, ...) -- see _DEFAULT_STYLE and
         _DEFAULT_METHOD_STYLE in this module for all overridable keys.
         Only keys you provide are changed; everything else keeps its
-        default.
-
+        default. Notably, "iqr_color" sets the median markers, and
+        "iqr_bar_color" (optional, falls back to "iqr_color" if unset)
+        sets the Q1/Q3 error bars and caps separately -- e.g. black
+        markers with gray bars, a common convention in salary charts.
     grouping, min_n_for_iqr, show_points, show_residual_box, title, ax,
     figsize, bins: unchanged from the original version -- see the
     module docstring for grouping semantics.
@@ -237,8 +249,9 @@ def plot_huber_iqr(x, y, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
             f"Median (IQR error bars, n\u2265{min_n_for_iqr})" if grouping == "unique"
             else "Median per bin (IQR error bars)"
         )
+        bar_color = s["iqr_bar_color"] if s.get("iqr_bar_color") is not None else s["iqr_color"]
         errorbar_kwargs = dict(
-            fmt="o", color=s["iqr_color"], ecolor=s["iqr_color"], elinewidth=s["iqr_elinewidth"],
+            fmt="o", color=s["iqr_color"], ecolor=bar_color, elinewidth=s["iqr_elinewidth"],
             label=iqr_label, zorder=3,
         )
         if s["iqr_marker_size"] is not None:
@@ -253,10 +266,10 @@ def plot_huber_iqr(x, y, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
         if cap_style == "manual":
             cap_width = s["cap_width"]
             for x_c, q1, q3 in zip(with_iqr["x_center"], with_iqr["q1"], with_iqr["q3"]):
-                ax.plot([x_c - cap_width, x_c + cap_width], [q1, q1], color=s["iqr_color"], linewidth=s["cap_linewidth"], zorder=3)
-                ax.plot([x_c - cap_width, x_c + cap_width], [q3, q3], color=s["iqr_color"], linewidth=s["cap_linewidth"], zorder=3)
+                ax.plot([x_c - cap_width, x_c + cap_width], [q1, q1], color=bar_color, linewidth=s["cap_linewidth"], zorder=3)
+                ax.plot([x_c - cap_width, x_c + cap_width], [q3, q3], color=bar_color, linewidth=s["cap_linewidth"], zorder=3)
 
-    if len(without_iqr) > 0:
+    if len(without_iqr) > 0 and show_undersized_points:
         ax.scatter(
             without_iqr["x_center"], without_iqr["median"],
             marker="o", facecolors="none", edgecolors=s["iqr_color"], s=40,

@@ -195,3 +195,74 @@ def test_plot_huber_iqr_backward_compatible_defaults_unchanged():
     fit = fit_huber_trend(age, salary, degree=2)
     direct = predict_trend(fit, result["grid"])
     assert np.allclose(result["huber"], direct)
+
+
+def test_plot_huber_iqr_separate_marker_and_bar_color():
+    """iqr_bar_color, when set, controls the Q1/Q3 error bars
+    separately from iqr_color (which sets the median markers) --
+    matches a common salary-chart convention of black markers with
+    gray bars."""
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, style={"iqr_color": "black", "iqr_bar_color": "gray"})
+    ax = plt.gca()
+    found = False
+    for c in ax.containers:
+        if hasattr(c, "lines"):
+            marker_line, caplines, barlinecols = c.lines
+            assert marker_line.get_color() == "black"
+            if len(barlinecols):
+                assert tuple(barlinecols[0].get_color()[0][:3]) == (0.5019607843137255,) * 3
+            found = True
+    assert found
+    plt.close()
+
+
+def test_plot_huber_iqr_iqr_bar_color_defaults_to_iqr_color():
+    """Regression: omitting iqr_bar_color must behave exactly as
+    before -- marker and bar share iqr_color."""
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, style={"iqr_color": "purple"})
+    ax = plt.gca()
+    for c in ax.containers:
+        if hasattr(c, "lines"):
+            marker_line, caplines, barlinecols = c.lines
+            assert marker_line.get_color() == "purple"
+            if len(barlinecols):
+                bar_rgba = tuple(barlinecols[0].get_color()[0])
+                marker_rgba = marker_line.get_markerfacecolor()
+                # both should resolve to the same underlying color ("purple")
+                import matplotlib.colors as mcolors
+                assert bar_rgba == mcolors.to_rgba("purple")
+    plt.close()
+
+
+def test_plot_huber_iqr_show_undersized_points_false_hides_hollow_markers():
+    import matplotlib.pyplot as plt
+    age, salary = make_sparse_integer_age_data()
+    plot_huber_iqr(age, salary, grouping="unique", min_n_for_iqr=5, show_undersized_points=False)
+    ax = plt.gca()
+    labels = [l.get_label() for l in ax.get_children() if hasattr(l, "get_label")]
+    assert not any("spread not shown" in str(lbl) for lbl in labels)
+    plt.close()
+
+
+def test_plot_huber_iqr_show_undersized_points_default_true_unchanged():
+    import matplotlib.pyplot as plt
+    age, salary = make_sparse_integer_age_data()
+    result = plot_huber_iqr(age, salary, grouping="unique", min_n_for_iqr=5)
+    ax = plt.gca()
+    labels = [l.get_label() for l in ax.get_children() if hasattr(l, "get_label")]
+    assert any("spread not shown" in str(lbl) for lbl in labels)
+    plt.close()
+
+
+def test_plot_huber_iqr_show_undersized_points_does_not_affect_binned_data():
+    age, salary = make_sparse_integer_age_data()
+    result_shown = plot_huber_iqr(age, salary, grouping="unique", min_n_for_iqr=5, show_undersized_points=True)
+    import matplotlib.pyplot as plt
+    plt.close()
+    result_hidden = plot_huber_iqr(age, salary, grouping="unique", min_n_for_iqr=5, show_undersized_points=False)
+    plt.close()
+    assert result_shown["binned"].equals(result_hidden["binned"])

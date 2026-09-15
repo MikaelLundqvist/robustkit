@@ -165,3 +165,32 @@ def test_export_outlier_pdf_title_fn_custom_title_applied():
         export_outlier_pdf(df, y_col="salary", segment_cols=["JobFamily"], x_col="age", path=path, min_size=20, min_points_to_plot=5, title_fn=title_fn)
         text = pypdf.PdfReader(path).pages[0].extract_text()
         assert "REVIEW" in text
+
+
+def test_export_huber_iqr_pdf_accepts_show_undersized_points():
+    """Regression: export_huber_iqr_pdf must accept and pass through
+    show_undersized_points to plot_huber_iqr without crashing."""
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "huber_iqr.pdf")
+        result = export_huber_iqr_pdf(
+            df, x_col="age", y_col="salary", segment_cols=["JobFamily"], path=path,
+            min_size=20, min_points_to_plot=5,
+            grouping="unique", min_n_for_iqr=5,
+            show_undersized_points=False,
+        )
+        assert os.path.exists(result)
+
+
+def test_export_huber_iqr_pdf_accepts_iqr_bar_color_via_style():
+    """Regression: the style dict's iqr_bar_color key must reach
+    plot_huber_iqr through export_huber_iqr_pdf without crashing."""
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "huber_iqr.pdf")
+        result = export_huber_iqr_pdf(
+            df, x_col="age", y_col="salary", segment_cols=["JobFamily"], path=path,
+            min_size=20, min_points_to_plot=5,
+            style={"iqr_color": "black", "iqr_bar_color": "gray"},
+        )
+        assert os.path.exists(result)
