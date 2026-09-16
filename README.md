@@ -580,6 +580,51 @@ up most clearly when one segment's shift is a real minority pattern
 against an otherwise-homogeneous majority, not when most segments
 already differ substantially from each other.
 
+`dual_reference_outlier_drilldown_report` extends the same A/B/C/D
+classification to every hierarchy level at once, without exclusive
+assignment -- the drilldown counterpart, same overlap semantics as
+the other drilldown functions:
+
+```python
+from robustkit import dual_reference_outlier_drilldown_report
+
+dual_reference_outlier_drilldown_report(
+    df, y_col="salary", x_col="age", segment_cols=["JobFamily", "Level", "OT"], k=3.0,
+)
+#   ...  segment  segment_level  reference_type
+```
+
+The GLOBAL reference is still computed once across the whole
+population (not per level) for the same reason as above; only the
+LOCAL reference is refit fresh within each group at each level.
+
+### Where does the effect come from: segment_contribution_report
+
+`segment_benchmark_report`/`-drilldown_report` answer "how far from
+benchmark is this segment?" `segment_contribution_report` answers a
+different question: **where in the hierarchy does that gap actually
+arise?**
+
+```python
+from robustkit import segment_contribution_report
+
+segment_contribution_report(
+    df, y_col="salary", segment_cols=["JobFamily", "Level", "OT"], x_col="age", min_size=20,
+)
+#   segment  segment_level  ...  difference  parent_segment  contribution
+```
+
+Each segment's `contribution` is `child_difference - parent_difference`
+-- the part of its benchmark gap NOT already explained by its broader,
+coarser parent. A JobFamily within a Level+OT combination might show a
+large `difference` from benchmark simply because that whole Level+OT
+combination runs high or low (a STRUCTURAL effect, already visible one
+level up); `contribution` isolates whatever remains once that broader
+pattern is subtracted out -- the LOCAL effect specific to this finer
+grouping. Segments at the coarsest hierarchy level have no parent
+within `segment_cols`, so `contribution` is `NaN` and `parent_segment`
+is `None` for them.
+
 ## Combined model + spread view
 
 `plot_analyst_view` and `plot_publisher_view` each show one thing --
@@ -683,6 +728,21 @@ callback for symmetry, with `info` there being `{"n", "n_flagged",
 also need domain-specific titles, even though for many teams that PDF
 stays internal and doesn't need one. Both default to a generic title
 when `title_fn` is omitted, so existing calls are unaffected.
+
+**`mode="exclusive"` (default) vs. `mode="drilldown"`**, matching the
+same distinction as the report functions above: `"exclusive"` assigns
+each individual to exactly one, most-specific segment -- one page per
+final segment, no overlap. `"drilldown"` instead renders a page for
+EVERY qualifying group at EVERY hierarchy level independently -- e.g.
+a page for `"ENG_P3_Yes"` AND a separate page for the broader
+`"P3_Yes"`, which includes those same individuals alongside everyone
+else at that level. The same individual can appear on multiple pages
+in drilldown mode -- that's the expected signature of overlap, same as
+the drilldown reports:
+
+```python
+export_huber_iqr_pdf(..., mode="drilldown")
+```
 
 All of `plot_huber_iqr`'s style parameters (`methods`,
 `show_bootstrap_band`, `cap_style`, `residual_box_metric`, `ylim`,

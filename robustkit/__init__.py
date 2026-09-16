@@ -41,7 +41,8 @@ from .segment_awareness.reports import (
     segment_stability_report, segment_benchmark_report, mad_outlier_report, export_outlier_pdf,
     segment_benchmark_drilldown_report, mad_outlier_drilldown_report,
     segment_stability_drilldown_report, outlier_drilldown_summary, segment_quality_report,
-    dual_reference_outlier_report, export_huber_iqr_pdf,
+    dual_reference_outlier_report, export_huber_iqr_pdf, dual_reference_outlier_drilldown_report,
+    segment_contribution_report,
 )
 from .quantiles.io import load_json_stat
 from .quantiles.trend import prepare_quantile_trend, plot_quantile_trend, quantile_trend_dispersion
@@ -115,6 +116,8 @@ __all__ = [
     "segment_quality_report",
     "dual_reference_outlier_report",
     "export_huber_iqr_pdf",
+    "dual_reference_outlier_drilldown_report",
+    "segment_contribution_report",
     "load_json_stat",
     "prepare_quantile_trend",
     "plot_quantile_trend",

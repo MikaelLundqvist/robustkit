@@ -879,7 +879,7 @@ def dual_reference_outlier_report(df, y_col, x_col, segment_cols, benchmark_fit=
 
 
 def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_points_to_plot=5,
-                          title_fn=None, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
+                          title_fn=None, mode="exclusive", degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
                           methods=("huber",), show_bootstrap_band=False, bootstrap_levels=(95,),
                           n_boot="auto", cap_style="matplotlib", residual_box_metric="r2",
                           ylim="auto", show_undersized_points=True, style=None, figsize=(10, 6)):
@@ -892,6 +892,19 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
     (which is typically for internal review): a full trend-plus-spread
     chart per segment, suitable for sharing with the people the chart
     actually describes.
+
+    mode: "exclusive" (default) assigns each individual to exactly one,
+        most-specific segment (via hierarchical_segment) -- one page
+        per final segment, no overlap. "drilldown" instead renders a
+        page for EVERY qualifying group at EVERY level of the
+        hierarchy independently, without exclusive assignment -- e.g.
+        a page for "ENG_P3_Yes" AND a separate page for the broader
+        "P3_Yes" (which includes those same individuals alongside
+        everyone else at that OT/level combination, regardless of
+        JobFamily). The same individual can appear on multiple pages
+        in drilldown mode. Use "exclusive" for "what's the single most
+        relevant chart for this person's team?"; use "drilldown" for
+        "what does every granularity level look like on its own?"
 
     Segments with fewer than min_points_to_plot observations are
     skipped (matching export_outlier_pdf's convention -- a chart with
@@ -914,14 +927,31 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
 
     Returns `path`.
     """
+    if mode not in ("exclusive", "drilldown"):
+        raise ValueError(f"mode must be 'exclusive' or 'drilldown', got {mode!r}")
+
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
 
     hierarchy = _build_hierarchy(list(segment_cols))
-    segmented = hierarchical_segment(df, hierarchy, min_size=min_size)
+
+    if mode == "exclusive":
+        segmented = hierarchical_segment(df, hierarchy, min_size=min_size)
+        page_groups = [
+            (str(segment_value), group, int(group["segment_level"].iloc[0]))
+            for segment_value, group in segmented.groupby("segment_id", observed=True)
+        ]
+    else:
+        page_groups = []
+        for level, cols in enumerate(hierarchy):
+            for name, sub in df.groupby(cols, observed=True):
+                if len(sub) < min_size:
+                    continue
+                page_groups.append((_label_group_name(name), sub, level))
+        page_groups.sort(key=lambda item: (item[2], item[0]))
 
     with PdfPages(path) as pdf:
-        for segment_value, group in segmented.groupby("segment_id", observed=True):
+        for segment_value, group, segment_level in page_groups:
             if len(group) < min_points_to_plot:
                 continue
 
@@ -929,7 +959,7 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
             y = group[y_col].to_numpy(dtype=float)
 
             if title_fn is not None:
-                info = {"n": len(group), "segment_level": int(group["segment_level"].iloc[0])}
+                info = {"n": len(group), "segment_level": segment_level}
                 title = title_fn(segment_value, info)
             else:
                 title = f"{segment_value} (n={len(group)})"
@@ -949,3 +979,215 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
             plt.close(fig)
 
     return path
+
+
+def dual_reference_outlier_drilldown_report(df, y_col, x_col, segment_cols, benchmark_fit=None, degree=2,
+                                             min_size=20, k=3.0, direction="negative", id_cols=None):
+    """
+    Same Type A/B/C/D classification as dual_reference_outlier_report,
+    but computed at EVERY level of the hierarchy independently,
+    without exclusive assignment -- the same individual can appear in
+    multiple rows, once per qualifying grouping (e.g. once within
+    JobFamily x Level x OT, and again within the broader Level x OT).
+
+    Answers "does this individual look unusual under both references,
+    at every granularity I might reasonably check?" rather than "what
+    is the single most relevant pair of references for this
+    individual?" (which is what the exclusive version answers).
+
+    The GLOBAL reference is computed ONCE, across the entire
+    population -- exactly as in dual_reference_outlier_report, and for
+    the same reason: a population-wide (not per-group) MAD/median
+    means a segment that's collectively shifted from the benchmark can
+    still register as a global deviation, rather than having that
+    shift silently absorbed by per-group re-centering. The LOCAL
+    reference is refit fresh within each group at each level, since
+    "local" specifically means "relative to whichever group we're
+    looking at right now."
+
+    Returns one row per (individual, hierarchy level) pair: id_cols
+    (or row_id), actual, local_expected, local_residual, local_flagged,
+    global_expected, global_residual, global_flagged, reference_type,
+    segment, segment_level.
+    """
+    if direction not in ("negative", "positive", "two_sided"):
+        raise ValueError(f"direction must be 'negative', 'positive', or 'two_sided', got {direction!r}")
+
+    def _flag(z):
+        if direction == "negative":
+            return z < -k
+        if direction == "positive":
+            return z > k
+        return np.abs(z) > k
+
+    if benchmark_fit is None:
+        if x_col is None:
+            raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
+        from ..benchmark.global_model import fit_huber_benchmark
+        benchmark_fit_resolved = fit_huber_benchmark(
+            df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
+        )
+    else:
+        benchmark_fit_resolved = benchmark_fit
+
+    from ..benchmark.global_model import benchmark_predict
+
+    y_all = df[y_col].to_numpy(dtype=float)
+    global_expected_full = np.asarray(benchmark_predict(benchmark_fit_resolved, df, x_col=x_col), dtype=float)
+    global_residual_full = y_all - global_expected_full
+    global_median = float(np.median(global_residual_full))
+    global_mad = float(1.4826 * np.median(np.abs(global_residual_full - global_median)))
+    safe_global_mad = global_mad if global_mad > 0 else np.inf
+    z_global_full = (global_residual_full - global_median) / safe_global_mad
+    global_flagged_full = _flag(z_global_full)
+
+    hierarchy = _build_hierarchy(list(segment_cols))
+    blocks = []
+
+    for level, cols in enumerate(hierarchy):
+        for name, sub in df.groupby(cols, observed=True):
+            if len(sub) < min_size:
+                continue
+
+            label = _label_group_name(name)
+            x = sub[x_col].to_numpy(dtype=float)
+            y = sub[y_col].to_numpy(dtype=float)
+
+            local_expected = np.full(len(sub), np.nan, dtype=float)
+            try:
+                local_fit = fit_huber_trend(x, y, degree=degree)
+                local_expected = predict_trend(local_fit, x)
+            except Exception:  # noqa: BLE001 -- leave as NaN; local_flagged becomes False for these rows
+                pass
+
+            local_residual = y - local_expected
+            local_median = np.nanmedian(local_residual) if np.any(~np.isnan(local_residual)) else np.nan
+            local_mad = 1.4826 * np.nanmedian(np.abs(local_residual - local_median)) if not np.isnan(local_median) else np.nan
+            safe_local_mad = local_mad if (not np.isnan(local_mad) and local_mad > 0) else np.inf
+            z_local = (local_residual - local_median) / safe_local_mad
+            local_flagged = np.nan_to_num(_flag(z_local), nan=0.0).astype(bool)
+
+            positions = df.index.get_indexer(sub.index)
+            global_expected = global_expected_full[positions]
+            global_residual = global_residual_full[positions]
+            global_flagged = global_flagged_full[positions]
+
+            if id_cols:
+                block = sub[id_cols].reset_index(drop=True)
+            else:
+                block = pd.DataFrame({"row_id": sub.index})
+
+            block["actual"] = y
+            block["local_expected"] = local_expected
+            block["local_residual"] = local_residual
+            block["local_flagged"] = local_flagged
+            block["global_expected"] = global_expected
+            block["global_residual"] = global_residual
+            block["global_flagged"] = global_flagged
+            block["segment"] = label
+            block["segment_level"] = level
+
+            conditions = [
+                block["local_flagged"] & block["global_flagged"],
+                block["local_flagged"] & ~block["global_flagged"],
+                ~block["local_flagged"] & block["global_flagged"],
+            ]
+            choices = ["A", "B", "C"]
+            block["reference_type"] = np.select(conditions, choices, default="D")
+
+            blocks.append(block)
+
+    if not blocks:
+        return pd.DataFrame()
+    return pd.concat(blocks, ignore_index=True)
+
+
+def segment_contribution_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, degree=2,
+                                 min_size=20, n_boot="auto", ci=95, seed=0):
+    """
+    Decompose each segment's benchmark difference into a STRUCTURAL
+    effect (already present at its parent, coarser grouping) and a
+    LOCAL segment effect (specific to this segment's finer
+    distinction):
+
+        contribution = child_difference - parent_difference
+
+    Answers "WHERE in the hierarchy does this effect arise?" -- e.g.
+    is a segment's deviation from benchmark just inherited from a
+    broader pattern already visible at a coarser level (its Level+OT
+    peers, say), or does it emerge specifically at this finer grouping
+    (this particular JobFamily within that Level+OT combination)?
+
+    Complementary to segment_benchmark_drilldown_report, which answers
+    "how far from benchmark is this segment" without decomposing WHY.
+    A positive contribution means this finer grouping does BETTER than
+    its broader parent would predict; negative means worse.
+
+    "Parent" follows the same fallback direction as the rest of
+    segment_awareness (drop the front-most, most-specific column):
+    a segment built from ["ENG", "P3", "Yes"] has parent ["P3", "Yes"].
+    Segments at the coarsest hierarchy level (no parent within
+    segment_cols) get contribution = NaN and parent_segment = None,
+    since there's nothing broader to compare them against.
+
+    Returns one row per (qualifying group, hierarchy level): segment,
+    segment_level, n, observed_median, expected_median, difference,
+    ci_lower, ci_upper, parent_segment, contribution.
+    """
+    if benchmark_fit is None:
+        if x_col is None:
+            raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
+        from ..benchmark.global_model import fit_huber_benchmark
+        benchmark_fit_resolved = fit_huber_benchmark(
+            df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
+        )
+    else:
+        benchmark_fit_resolved = benchmark_fit
+
+    from ..benchmark.global_model import benchmark_predict
+
+    hierarchy = _build_hierarchy(list(segment_cols))
+    level_results = {}
+
+    for level, cols in enumerate(hierarchy):
+        level_results[level] = {}
+        for name, sub in df.groupby(cols, observed=True):
+            if len(sub) < min_size:
+                continue
+
+            key = name if isinstance(name, tuple) else (name,)
+            label = _label_group_name(name)
+            y = sub[y_col].to_numpy(dtype=float)
+            expected = np.asarray(benchmark_predict(benchmark_fit_resolved, sub, x_col=x_col), dtype=float)
+            n = len(sub)
+
+            def stat_by_index(idx, _sub=sub, _fit=benchmark_fit_resolved):
+                s = _sub.iloc[idx]
+                y_s = s[y_col].to_numpy(dtype=float)
+                exp_s = benchmark_predict(_fit, s, x_col=x_col)
+                return float(np.median(y_s - exp_s))
+
+            ci_result = bca_bootstrap_ci_by_index(n, stat_by_index, n_boot=n_boot, ci=ci, seed=seed)
+
+            level_results[level][key] = {
+                "segment": label, "segment_level": level, "n": n,
+                "observed_median": float(np.median(y)), "expected_median": float(np.median(expected)),
+                "difference": ci_result["estimate"], "ci_lower": ci_result["lower"], "ci_upper": ci_result["upper"],
+                "_key": key,
+            }
+
+    rows = []
+    for level, results in level_results.items():
+        for key, info in results.items():
+            row = {k: v for k, v in info.items() if k != "_key"}
+            parent_info = level_results.get(level + 1, {}).get(key[1:]) if len(key) > 1 else None
+            if parent_info is not None:
+                row["parent_segment"] = parent_info["segment"]
+                row["contribution"] = info["difference"] - parent_info["difference"]
+            else:
+                row["parent_segment"] = None
+                row["contribution"] = np.nan
+            rows.append(row)
+
+    result = pd.DataFrame(rows)
+    return result.sort_values(["segment_level", "segment"]).reset_index(drop=True)
