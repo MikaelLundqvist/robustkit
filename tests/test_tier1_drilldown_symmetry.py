@@ -145,3 +145,45 @@ def test_dual_reference_outlier_drilldown_rejects_invalid_direction():
     df, _ = make_four_type_scenario_multilevel()
     with pytest.raises(ValueError):
         dual_reference_outlier_drilldown_report(df, y_col="salary", x_col="age", segment_cols=["segment_tag"], direction="sideways")
+
+
+# ---------------------------------------------------------------------------
+# export_huber_iqr_images
+# ---------------------------------------------------------------------------
+
+def test_export_huber_iqr_images_matches_pdf_page_count():
+    from robustkit import export_huber_iqr_images, export_huber_iqr_pdf
+    import os
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = os.path.join(tmp, "images")
+        paths = export_huber_iqr_images(df, x_col="age", y_col="salary", segment_cols=["JobFamily", "P_niva", "OT"],
+                                         output_dir=out_dir, min_size=20, min_points_to_plot=5)
+        pdf_path = os.path.join(tmp, "out.pdf")
+        export_huber_iqr_pdf(df, x_col="age", y_col="salary", segment_cols=["JobFamily", "P_niva", "OT"],
+                              path=pdf_path, min_size=20, min_points_to_plot=5)
+        pypdf = pytest.importorskip("pypdf")
+        n_pages = len(pypdf.PdfReader(pdf_path).pages)
+        assert len(paths) == n_pages
+        assert all(os.path.exists(p) for p in paths)
+
+
+def test_export_huber_iqr_images_creates_output_dir():
+    from robustkit import export_huber_iqr_images
+    import os
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = os.path.join(tmp, "does", "not", "exist", "yet")
+        paths = export_huber_iqr_images(df, x_col="age", y_col="salary", segment_cols=["JobFamily"],
+                                         output_dir=out_dir, min_size=20, min_points_to_plot=5)
+        assert os.path.isdir(out_dir)
+        assert len(paths) > 0
+
+
+def test_export_huber_iqr_images_rejects_invalid_mode():
+    from robustkit import export_huber_iqr_images
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        with pytest.raises(ValueError):
+            export_huber_iqr_images(df, x_col="age", y_col="salary", segment_cols=["JobFamily"],
+                                     output_dir=tmp, mode="bogus")

@@ -749,6 +749,30 @@ All of `plot_huber_iqr`'s style parameters (`methods`,
 `style`, ...) pass straight through `export_huber_iqr_pdf` to each
 segment's page.
 
+**`export_huber_iqr_images`** is the same function in every respect
+except where the output goes: one image file per segment in a
+directory, instead of one combined PDF. Same segment_cols, same
+`mode`, same `title_fn`, same style parameters -- swap the function
+name and `path` for `output_dir` to get individual files instead of
+pages:
+
+```python
+from robustkit import export_huber_iqr_images
+
+export_huber_iqr_images(
+    df, x_col="age", y_col="salary", segment_cols=["JobFamily", "Level", "OT"],
+    output_dir="salary_plots", mode="drilldown",
+)
+```
+
+Useful whenever per-segment charts get consumed individually --
+dropped into slide decks one at a time, browsed in a file explorer,
+or fed into some other pipeline expecting separate image files --
+rather than as a single document. Filenames are derived from each
+segment's id or label, sanitized for the filesystem; a numeric suffix
+is appended if two segments would otherwise collide. Returns the list
+of saved file paths, in the order rendered.
+
 ## Loading published quantile tables (SCB / JSON-stat)
 
 Some statistics agencies (e.g. Statistics Sweden, SCB) publish

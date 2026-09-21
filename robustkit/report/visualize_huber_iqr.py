@@ -317,7 +317,14 @@ def plot_huber_iqr(x, y, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
         ax.set_ylim(*ylim)
 
     ax.set_title(title if title is not None else "Huber trend with per-bin median and IQR")
-    ax.legend(loc="best")
+    # Fixed, deterministic placement (not loc="best") -- "best" has no
+    # awareness of the residual info box, which is placed via ax.text()
+    # at the top-left (0.02, 0.98) and isn't part of matplotlib's
+    # legend-collision system, so "best" could -- and did -- choose
+    # that same corner and overlap it. Lower-right avoids that
+    # deterministically, at some cost of being wrong for the rare
+    # chart shape where the trend's low end sits in that corner too.
+    ax.legend(loc="lower right")
     ax.grid(True, linestyle=s["grid_linestyle"], alpha=s["grid_alpha"])
 
     if created_fig:

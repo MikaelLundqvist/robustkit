@@ -266,3 +266,19 @@ def test_plot_huber_iqr_show_undersized_points_does_not_affect_binned_data():
     result_hidden = plot_huber_iqr(age, salary, grouping="unique", min_n_for_iqr=5, show_undersized_points=False)
     plt.close()
     assert result_shown["binned"].equals(result_hidden["binned"])
+
+
+def test_plot_huber_iqr_legend_does_not_overlap_residual_box():
+    """Regression: legend uses a fixed, deterministic location (not
+    loc='best') so it can never collide with the residual info box,
+    which is placed at a fixed spot (top-left, axes coords 0.02/0.98)
+    outside matplotlib's legend-collision awareness."""
+    import matplotlib.pyplot as plt
+    age, salary = make_concave_data()
+    plot_huber_iqr(age, salary, show_residual_box=True)
+    ax = plt.gca()
+    legend = ax.get_legend()
+    assert legend is not None
+    # loc="lower right" corresponds to matplotlib's internal code 4
+    assert legend._loc == 4
+    plt.close()

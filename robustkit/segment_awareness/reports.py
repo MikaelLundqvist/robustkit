@@ -981,6 +981,105 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
     return path
 
 
+def export_huber_iqr_images(df, x_col, y_col, segment_cols, output_dir, min_size=20, min_points_to_plot=5,
+                             title_fn=None, mode="exclusive", degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
+                             methods=("huber",), show_bootstrap_band=False, bootstrap_levels=(95,),
+                             n_boot="auto", cap_style="matplotlib", residual_box_metric="r2",
+                             ylim="auto", show_undersized_points=True, style=None, figsize=(10, 6),
+                             image_format="png", dpi=150):
+    """
+    Same chart, same segments, same parameters as export_huber_iqr_pdf
+    -- but one image file per segment in output_dir, instead of one
+    combined PDF. Useful whenever the per-segment charts are consumed
+    individually rather than as a single document: dropped into slide
+    decks or reports one at a time, browsed in a file explorer, or fed
+    into some other pipeline that expects separate image files.
+
+    output_dir is created if it doesn't already exist. Each segment's
+    file is named from its segment id or label (sanitized for
+    filesystem safety -- anything other than letters, digits, '-', '_'
+    becomes '_') plus image_format's extension, e.g.
+    "ENG_P3_Yes.png". If two segments would sanitize to the same
+    filename, a numeric suffix is appended to keep them distinct.
+
+    mode, title_fn, and every other parameter carry the exact same
+    meaning as in export_huber_iqr_pdf -- see that function's
+    docstring; this one only changes where the output goes.
+
+    Returns a list of the saved file paths, in the same order as the
+    segments were rendered.
+    """
+    if mode not in ("exclusive", "drilldown"):
+        raise ValueError(f"mode must be 'exclusive' or 'drilldown', got {mode!r}")
+
+    import os
+    import re
+    import matplotlib.pyplot as plt
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    hierarchy = _build_hierarchy(list(segment_cols))
+
+    if mode == "exclusive":
+        segmented = hierarchical_segment(df, hierarchy, min_size=min_size)
+        page_groups = [
+            (str(segment_value), group, int(group["segment_level"].iloc[0]))
+            for segment_value, group in segmented.groupby("segment_id", observed=True)
+        ]
+    else:
+        page_groups = []
+        for level, cols in enumerate(hierarchy):
+            for name, sub in df.groupby(cols, observed=True):
+                if len(sub) < min_size:
+                    continue
+                page_groups.append((_label_group_name(name), sub, level))
+        page_groups.sort(key=lambda item: (item[2], item[0]))
+
+    def _sanitize_filename(name):
+        safe = re.sub(r"[^A-Za-z0-9_-]", "_", str(name))
+        return safe or "segment"
+
+    saved_paths = []
+    used_names = {}
+
+    for segment_value, group, segment_level in page_groups:
+        if len(group) < min_points_to_plot:
+            continue
+
+        x = group[x_col].to_numpy(dtype=float)
+        y = group[y_col].to_numpy(dtype=float)
+
+        if title_fn is not None:
+            info = {"n": len(group), "segment_level": segment_level}
+            title = title_fn(segment_value, info)
+        else:
+            title = f"{segment_value} (n={len(group)})"
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        plot_huber_iqr(
+            x, y, degree=degree, bins=bins, grouping=grouping, min_n_for_iqr=min_n_for_iqr,
+            show_points=False, show_residual_box=True, residual_box_metric=residual_box_metric,
+            methods=methods, show_bootstrap_band=show_bootstrap_band, bootstrap_levels=bootstrap_levels,
+            n_boot=n_boot, cap_style=cap_style, ylim=ylim, show_undersized_points=show_undersized_points,
+            style=style, title=title, ax=ax, figsize=figsize,
+        )
+
+        fig.tight_layout()
+
+        base_name = _sanitize_filename(segment_value)
+        count = used_names.get(base_name, 0)
+        used_names[base_name] = count + 1
+        file_name = f"{base_name}.{image_format}" if count == 0 else f"{base_name}_{count}.{image_format}"
+        file_path = os.path.join(output_dir, file_name)
+
+        fig.savefig(file_path, dpi=dpi)
+        plt.close(fig)
+        saved_paths.append(file_path)
+
+    return saved_paths
+
+
 def dual_reference_outlier_drilldown_report(df, y_col, x_col, segment_cols, benchmark_fit=None, degree=2,
                                              min_size=20, k=3.0, direction="negative", id_cols=None):
     """
