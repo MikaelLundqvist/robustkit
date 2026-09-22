@@ -880,7 +880,7 @@ def dual_reference_outlier_report(df, y_col, x_col, segment_cols, benchmark_fit=
 
 def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_points_to_plot=5,
                           title_fn=None, mode="exclusive", degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
-                          methods=("huber",), show_bootstrap_band=False, bootstrap_levels=(95,),
+                          methods=("huber",), show_points=False, show_bootstrap_band=False, bootstrap_levels=(95,),
                           n_boot="auto", cap_style="matplotlib", residual_box_metric="r2",
                           ylim="auto", show_undersized_points=True, style=None, figsize=(10, 6)):
     """
@@ -919,11 +919,13 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
         generic "{segment_name} (n=...)" title if not given.
 
     All other parameters (degree, bins, grouping, min_n_for_iqr,
-    methods, show_bootstrap_band, bootstrap_levels, n_boot, cap_style,
-    residual_box_metric, ylim, show_undersized_points, style, figsize)
-    are passed straight through to plot_huber_iqr for each segment's
-    page -- see that function's docstring for what they do and how to
-    configure them (e.g. to match an existing chart style exactly).
+    methods, show_points, show_bootstrap_band, bootstrap_levels, n_boot,
+    cap_style, residual_box_metric, ylim, show_undersized_points, style,
+    figsize) are passed straight through to plot_huber_iqr for each
+    segment's page -- see that function's docstring for what they do
+    and how to configure them (e.g. to match an existing chart style
+    exactly, or to switch between "analyst" charts with show_points=True
+    and "publisher" charts with the default show_points=False).
 
     Returns `path`.
     """
@@ -968,7 +970,7 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
 
             plot_huber_iqr(
                 x, y, degree=degree, bins=bins, grouping=grouping, min_n_for_iqr=min_n_for_iqr,
-                show_points=False, show_residual_box=True, residual_box_metric=residual_box_metric,
+                show_points=show_points, show_residual_box=True, residual_box_metric=residual_box_metric,
                 methods=methods, show_bootstrap_band=show_bootstrap_band, bootstrap_levels=bootstrap_levels,
                 n_boot=n_boot, cap_style=cap_style, ylim=ylim, show_undersized_points=show_undersized_points,
                 style=style, title=title, ax=ax, figsize=figsize,
@@ -983,7 +985,7 @@ def export_huber_iqr_pdf(df, x_col, y_col, segment_cols, path, min_size=20, min_
 
 def export_huber_iqr_images(df, x_col, y_col, segment_cols, output_dir, min_size=20, min_points_to_plot=5,
                              title_fn=None, mode="exclusive", degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
-                             methods=("huber",), show_bootstrap_band=False, bootstrap_levels=(95,),
+                             methods=("huber",), show_points=False, show_bootstrap_band=False, bootstrap_levels=(95,),
                              n_boot="auto", cap_style="matplotlib", residual_box_metric="r2",
                              ylim="auto", show_undersized_points=True, style=None, figsize=(10, 6),
                              image_format="png", dpi=150):
@@ -1059,7 +1061,7 @@ def export_huber_iqr_images(df, x_col, y_col, segment_cols, output_dir, min_size
 
         plot_huber_iqr(
             x, y, degree=degree, bins=bins, grouping=grouping, min_n_for_iqr=min_n_for_iqr,
-            show_points=False, show_residual_box=True, residual_box_metric=residual_box_metric,
+            show_points=show_points, show_residual_box=True, residual_box_metric=residual_box_metric,
             methods=methods, show_bootstrap_band=show_bootstrap_band, bootstrap_levels=bootstrap_levels,
             n_boot=n_boot, cap_style=cap_style, ylim=ylim, show_undersized_points=show_undersized_points,
             style=style, title=title, ax=ax, figsize=figsize,

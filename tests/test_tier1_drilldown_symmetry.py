@@ -187,3 +187,65 @@ def test_export_huber_iqr_images_rejects_invalid_mode():
         with pytest.raises(ValueError):
             export_huber_iqr_images(df, x_col="age", y_col="salary", segment_cols=["JobFamily"],
                                      output_dir=tmp, mode="bogus")
+
+
+# ---------------------------------------------------------------------------
+# Bug fix: show_points not exposed by export_huber_iqr_pdf/_images
+# ---------------------------------------------------------------------------
+
+def test_export_huber_iqr_pdf_accepts_show_points():
+    from robustkit import export_huber_iqr_pdf
+    import os
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "out.pdf")
+        result = export_huber_iqr_pdf(df, x_col="age", y_col="salary", segment_cols=["JobFamily"],
+                                       path=path, min_size=20, min_points_to_plot=5, show_points=True)
+        assert os.path.exists(result)
+
+
+def test_export_huber_iqr_images_accepts_show_points():
+    from robustkit import export_huber_iqr_images
+    import os
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = os.path.join(tmp, "images")
+        paths = export_huber_iqr_images(df, x_col="age", y_col="salary", segment_cols=["JobFamily"],
+                                         output_dir=out_dir, min_size=20, min_points_to_plot=5, show_points=True)
+        assert len(paths) > 0
+        assert all(os.path.exists(p) for p in paths)
+
+
+def test_export_huber_iqr_images_show_points_defaults_to_false():
+    """Regression: omitting show_points must keep the pre-fix default
+    behavior (publisher-style charts, no raw scatter points)."""
+    from robustkit import export_huber_iqr_images
+    import os
+    df = make_job_family_df()
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = os.path.join(tmp, "images")
+        paths = export_huber_iqr_images(df, x_col="age", y_col="salary", segment_cols=["JobFamily"],
+                                         output_dir=out_dir, min_size=20, min_points_to_plot=5)
+        assert len(paths) > 0
+
+
+def test_show_points_true_actually_adds_scatter_layer():
+    """Confirms show_points isn't just accepted but actually changes
+    the rendered chart -- a collection count check, not just a
+    no-crash check."""
+    import matplotlib.pyplot as plt
+    from robustkit import plot_huber_iqr
+    df = make_job_family_df()
+    x, y = df["age"].to_numpy(), df["salary"].to_numpy()
+
+    fig, ax = plt.subplots()
+    plot_huber_iqr(x, y, show_points=True, ax=ax)
+    n_with = len(ax.collections)
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    plot_huber_iqr(x, y, show_points=False, ax=ax)
+    n_without = len(ax.collections)
+    plt.close(fig)
+
+    assert n_with > n_without

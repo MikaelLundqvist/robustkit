@@ -744,10 +744,13 @@ the drilldown reports:
 export_huber_iqr_pdf(..., mode="drilldown")
 ```
 
-All of `plot_huber_iqr`'s style parameters (`methods`,
+All of `plot_huber_iqr`'s style parameters (`methods`, `show_points`,
 `show_bootstrap_band`, `cap_style`, `residual_box_metric`, `ylim`,
 `style`, ...) pass straight through `export_huber_iqr_pdf` to each
-segment's page.
+segment's page -- including `show_points`, which switches between
+"publisher" charts (the default, `show_points=False`, no raw scatter)
+and "analyst" charts (`show_points=True`, individual observations
+visible) without needing to fall back to a manual per-segment loop.
 
 **`export_huber_iqr_images`** is the same function in every respect
 except where the output goes: one image file per segment in a
