@@ -428,6 +428,19 @@ Segments with zero MAD (a degenerate case, usually a tiny segment
 where every residual happens to match) are treated as having an
 infinite threshold rather than flagging everyone in them.
 
+`reference`: `"model"` (default) flags against `benchmark_fit` (or, if
+none is given, a single Huber trend fit once across the whole
+population). `"curve"` instead fits a fresh Huber trend WITHIN each
+segment, on that segment's own data alone, and flags against THAT --
+no benchmark model involved at all. Use `"curve"` when the flagging
+itself, not just a chart, should match "how does this person compare
+to their immediate segment-mates" -- e.g. a report for someone who
+shouldn't need the underlying benchmark model explained to trust the
+numbers. `x_col` is required either way, but `reference="curve"` needs
+it even when a custom `benchmark_fit` would otherwise have made it
+optional. `mad_outlier_drilldown_report` takes the same `reference`
+parameter, with identical semantics.
+
 `export_outlier_pdf` renders one chart per segment -- built from the
 same segmentation and flagging as `mad_outlier_report` -- as a
 one-page-per-segment PDF, for visual verification alongside the
@@ -443,21 +456,45 @@ export_outlier_pdf(
 )
 ```
 
-`mode="benchmark"` (default) plots the exact values used for flagging.
-`mode="local"` instead fits a fresh Huber trend within each segment
-alone -- often easier to read for "where does this person sit relative
-to their immediate colleagues?" Flagging always uses the benchmark
-residuals regardless of `mode`, so a point can visually sit close to
-the local curve yet still be flagged if the benchmark disagrees with
-the segment's own trend -- that gap is informative, not a rendering
-inconsistency.
+`mode="benchmark"` (default) plots a Huber curve fit to the benchmark's
+own predicted values, not the raw values connected point-to-point --
+for a multivariate benchmark model (depending on more than `x_col`),
+raw expected values aren't a pure function of `x_col` within a
+segment, so connecting them can zig-zag sharply even for a perfectly
+sensible model. The Huber-fit curve smooths over that without becoming
+a different reference: it's still derived entirely from the
+benchmark's own predictions. `mode="local"` instead fits a fresh Huber
+trend within each segment on the actual observed values alone -- often
+easier to read for "where does this person sit relative to their
+immediate colleagues?"
 
-Each page plots every observation in that segment, the benchmark's
-expected values (the exact same values used for flagging, not a
-separately re-fit curve), flagged outliers marked distinctly, and an
-info box (n, flagged count/percentage, the segment's MAD, and the
-flagging rule) so a reviewer can see *why* points are flagged directly
-from the chart, without cross-referencing the numeric report.
+`mode` (what's drawn) and `reference` (what flagging actually uses)
+are independent choices -- `export_outlier_pdf` takes the same
+`reference="model"/"curve"` parameter as `mad_outlier_report`, and
+always computes flagging exactly the way that report would with
+matching arguments, so the chart and the numeric report never
+disagree. Pairing `mode="local"` with `reference="curve"` gives a
+chart where the drawn curve and the flagging rule are the *same
+thing* -- no benchmark model to explain at all, useful for charts
+handed to someone who should just be able to look and trust it. Other
+combinations -- e.g. `mode="benchmark"` with `reference="curve"` --
+are allowed too (draw the benchmark's smoothed curve for context, but
+flag against each segment's own local trend); the info box always
+states plainly which curve is drawn and which reference the flagging
+rule actually used, so no combination is ambiguous on the page itself.
+
+`segment_mode="exclusive"` (default) vs. `segment_mode="drilldown"`
+offers the same choice as `export_huber_iqr_pdf`: one page per
+individual's single most-specific segment, or a page for every
+qualifying group at every hierarchy level independently (with the
+expected overlap -- the same individual can appear on multiple pages).
+
+Each page plots every observation in that segment, the reference
+curve, flagged outliers marked distinctly, and an info box (n, flagged
+count/percentage, the segment's MAD, the flagging rule, and which
+curve/reference is in play) so a reviewer can see *why* points are
+flagged directly from the chart, without cross-referencing the numeric
+report.
 Segments with fewer than `min_points_to_plot` (default 5) observations
 are skipped in the PDF -- a chart with a handful of points isn't
 meaningfully verifiable -- but still appear in `mad_outlier_report`'s
@@ -724,10 +761,11 @@ export_huber_iqr_pdf(..., title_fn=pretty_title)
 
 `export_outlier_pdf` accepts the same `title_fn(segment_name, info)`
 callback for symmetry, with `info` there being `{"n", "n_flagged",
-"pct_flagged", "k", "segment_mad"}` -- useful if outlier review PDFs
-also need domain-specific titles, even though for many teams that PDF
-stays internal and doesn't need one. Both default to a generic title
-when `title_fn` is omitted, so existing calls are unaffected.
+"pct_flagged", "k", "segment_mad", "segment_level"}` -- useful if
+outlier review PDFs also need domain-specific titles, even though for
+many teams that PDF stays internal and doesn't need one. Both default
+to a generic title when `title_fn` is omitted, so existing calls are
+unaffected.
 
 **`mode="exclusive"` (default) vs. `mode="drilldown"`**, matching the
 same distinction as the report functions above: `"exclusive"` assigns

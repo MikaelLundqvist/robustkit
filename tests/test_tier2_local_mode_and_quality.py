@@ -61,7 +61,7 @@ def test_export_outlier_pdf_local_mode_uses_different_legend_label():
         text_bench = pypdf.PdfReader(path_bench).pages[0].extract_text()
         text_local = pypdf.PdfReader(path_local).pages[0].extract_text()
 
-        assert "Benchmark" in text_bench
+        assert "benchmark" in text_bench.lower()
         assert "Local" in text_local
 
 

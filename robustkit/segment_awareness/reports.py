@@ -114,9 +114,9 @@ def segment_benchmark_report(df, y_col, segment_cols, benchmark_fit=None, x_col=
 
 
 def mad_outlier_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, degree=2,
-                        min_size=20, k=3.0, direction="negative", id_cols=None):
+                        min_size=20, k=3.0, direction="negative", id_cols=None, reference="model"):
     """
-    Flag individuals whose residual from a benchmark model is an
+    Flag individuals whose residual from a reference trend is an
     outlier relative to their OWN segment's typical spread (MAD),
     rather than the population as a whole -- comparing someone against
     an irrelevant reference population is exactly the failure mode
@@ -129,6 +129,23 @@ def mad_outlier_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, 
     gets compared against a sensibly-sized reference population,
     rather than being skipped or compared against an unrelated one.
 
+    reference: "model" (default) computes each individual's expected
+        value from benchmark_fit (or, if none is given, a Huber trend
+        fit once across the whole population) -- the model may be as
+        simple as a single Huber trend on x_col, or an arbitrary
+        multi-column model. "curve" instead fits a fresh Huber trend
+        WITHIN each segment, on that segment's own (x_col, y_col)
+        values alone, and uses THAT curve's prediction as each
+        member's expected value -- no benchmark_fit involved at all.
+        Choose "curve" when you want the flagging itself, not just a
+        chart, to match "how does this person compare to their
+        immediate segment-mates" -- e.g. for a report handed to
+        someone who shouldn't need the underlying benchmark model
+        explained to trust the numbers. x_col is required either way,
+        but reference="curve" needs it even when a custom
+        benchmark_fit would otherwise have made it optional, since no
+        model is used at all in that case.
+
     Flagging logic: within each individual's assigned segment, compute
     the segment's median residual and MAD (median absolute deviation,
     scaled to be comparable to a standard deviation under normality).
@@ -137,14 +154,14 @@ def mad_outlier_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, 
     either side of (direction="two_sided") their segment's OWN median
     residual -- not literally "residual < -k*MAD" against zero, since
     centering on the segment's median residual avoids flagging an
-    entire segment just because the benchmark is systematically biased
+    entire segment just because the reference is systematically biased
     for that segment as a whole.
 
     k: number of MADs from the segment's median residual beyond which
         a point is flagged. 3.0 is a conventional threshold; some
         sources use 3.5 for a stricter criterion.
     direction: "negative" (default -- flag underperformance relative
-        to the benchmark, the typical HR/union use case), "positive",
+        to the reference, the typical HR/union use case), "positive",
         or "two_sided".
     id_cols: columns identifying each individual in the output (e.g.
         an employee ID). Falls back to the DataFrame's index as
@@ -155,7 +172,10 @@ def mad_outlier_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, 
     residual is identical -- most often a very small segment) cannot
     be meaningfully flagged against and are treated as having an
     infinite threshold, rather than flagging everything in them or
-    raising a divide-by-zero error.
+    raising a divide-by-zero error. With reference="curve", a segment
+    too small to fit a stable local trend (fewer than degree+2 points,
+    or too few distinct x values) falls back to that segment's own
+    median actual value as a flat reference, rather than raising.
 
     Returns one row per individual: id_cols (or row_id), actual,
     expected, residual, residual_pct, segment, segment_level,
@@ -163,23 +183,40 @@ def mad_outlier_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, 
     """
     if direction not in ("negative", "positive", "two_sided"):
         raise ValueError(f"direction must be 'negative', 'positive', or 'two_sided', got {direction!r}")
-
-    benchmark_fit_resolved = benchmark_fit
-    if benchmark_fit_resolved is None:
-        if x_col is None:
-            raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
-        from ..benchmark.global_model import fit_huber_benchmark
-        benchmark_fit_resolved = fit_huber_benchmark(
-            df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
-        )
+    if reference not in ("model", "curve"):
+        raise ValueError(f"reference must be 'model' or 'curve', got {reference!r}")
+    if reference == "curve" and x_col is None:
+        raise ValueError("x_col is required when reference='curve' (a local trend needs something to fit against).")
 
     hierarchy = _build_hierarchy(list(segment_cols))
     segmented = hierarchical_segment(df, hierarchy, min_size=min_size)
 
-    from ..benchmark.global_model import benchmark_predict
-
     y = segmented[y_col].to_numpy(dtype=float)
-    expected = np.asarray(benchmark_predict(benchmark_fit_resolved, segmented, x_col=x_col), dtype=float)
+
+    if reference == "model":
+        benchmark_fit_resolved = benchmark_fit
+        if benchmark_fit_resolved is None:
+            if x_col is None:
+                raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
+            from ..benchmark.global_model import fit_huber_benchmark
+            benchmark_fit_resolved = fit_huber_benchmark(
+                df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
+            )
+        from ..benchmark.global_model import benchmark_predict
+        expected = np.asarray(benchmark_predict(benchmark_fit_resolved, segmented, x_col=x_col), dtype=float)
+    else:  # reference == "curve"
+        from ..core.trend import fit_huber_trend, predict_trend
+        expected = np.empty(len(segmented), dtype=float)
+        for seg_id, group in segmented.groupby("segment_id", observed=True):
+            seg_x = group[x_col].to_numpy(dtype=float)
+            seg_y = group[y_col].to_numpy(dtype=float)
+            idx = segmented.index.get_indexer(group.index)
+            try:
+                local_fit = fit_huber_trend(seg_x, seg_y, degree=degree)
+                expected[idx] = predict_trend(local_fit, seg_x)
+            except Exception:  # noqa: BLE001 -- too few points/distinct x for a stable local fit
+                expected[idx] = np.median(seg_y)
+
     residual = y - expected
     residual_pct = np.where(expected != 0, residual / expected * 100, np.nan)
 
@@ -226,7 +263,7 @@ def mad_outlier_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, 
 def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None, degree=2,
                         min_size=20, k=3.0, direction="negative", id_cols=None,
                         min_points_to_plot=5, annotate_flagged_with=None, mode="benchmark",
-                        title_fn=None, figsize=(10, 6)):
+                        segment_mode="exclusive", reference="model", title_fn=None, figsize=(10, 6)):
     """
     Render one chart per segment -- built from the same hierarchical
     segmentation and MAD-outlier flagging as mad_outlier_report --
@@ -241,25 +278,64 @@ def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None,
     independent checks that, when they agree, increase confidence in
     the result more than either alone.
 
-    mode: "benchmark" (default) plots the benchmark's expected values
-        -- the EXACT values used to compute residuals and flag
-        outliers, connected in x-order. Most consistent with the
-        numbers in mad_outlier_report, since the flagging always uses
-        benchmark residuals regardless of this setting.
+    reference: "model" (default) or "curve" -- exactly the same choice
+        as mad_outlier_report's `reference`, and this function always
+        computes its flagging the same way that report would with the
+        same reference, so the numbers on this chart and a
+        mad_outlier_report call with matching arguments never
+        disagree. "model" flags against benchmark_fit's (or, if none
+        is given, a single population-wide Huber trend's) expected
+        values. "curve" flags against a fresh Huber trend fit WITHIN
+        each segment on that segment's own (x_col, y_col) alone -- no
+        benchmark model involved at all.
+
+    mode: "benchmark" (default) plots a Huber curve fit to the
+        benchmark's own expected values (the EXACT values used to
+        compute residuals and flag outliers when reference="model"),
+        rather than connecting those raw values point-to-point. For a
+        multivariate benchmark_fit (depending on more than x_col),
+        "expected" is not a pure function of x_col within a segment --
+        two people the same age but a different JobFamily, say, get
+        different expected values -- so connecting raw values sorted
+        by x can zig-zag sharply even though the underlying model is
+        perfectly sensible. Fitting a Huber curve to those same
+        expected values smooths over exactly that variation, without
+        becoming a different reference: it's still derived entirely
+        from the benchmark model's own predictions, just presented as
+        a readable curve instead of a jagged connect-the-dots line.
         "local" instead fits a fresh Huber trend WITHIN each segment
-        on (x_col, y_col) alone, and plots that smooth curve --
-        typically easier to read for "where does this person sit
-        relative to their immediate colleagues?" Note that flagging
-        still uses the BENCHMARK residuals even in "local" mode, so a
-        point can visually sit close to the local curve yet still be
-        flagged (or vice versa) if the benchmark disagrees with the
-        segment's own local trend -- surfacing that gap is often
-        useful information, not a rendering inconsistency.
+        on (x_col, y_col) alone (the actual observed values) -- this
+        is the SAME curve reference="curve" flags against, so pairing
+        mode="local" with reference="curve" gives a chart where the
+        drawn curve and the flagging rule are always the exact same
+        thing -- useful for a chart handed to someone who shouldn't
+        need the underlying benchmark model explained at all.
+
+        mode and reference are independent choices, so combinations
+        like mode="benchmark" with reference="curve" are allowed too
+        (draw the benchmark's smoothed curve for context, but flag
+        against each segment's own local trend); the info box always
+        states plainly which curve is drawn and which reference the
+        flagging rule actually used, so no combination is ambiguous
+        on the page itself.
+
+    segment_mode: "exclusive" (default) assigns each individual to
+        exactly one, most-specific segment -- one page per final
+        segment, no overlap (same fallback behavior as
+        hierarchical_segment: a segment smaller than min_size falls
+        back to a broader grouping). "drilldown" instead renders a
+        page for EVERY qualifying group at EVERY level of the
+        hierarchy independently, without exclusive assignment -- the
+        same individual can appear on multiple pages, once per level
+        they qualify at. Matches the same distinction already offered
+        by export_huber_iqr_pdf and export_huber_iqr_images.
 
     Each page includes an info box (n, flagged count/percentage, the
-    segment's MAD, and the flagging rule) so a reviewer can understand
-    "why are these points flagged?" directly from the chart, without
-    needing to cross-reference the numeric report.
+    segment's MAD, the flagging rule, which curve is drawn, and which
+    reference the flagging rule actually uses) so a reviewer can
+    understand "why are these points flagged?" directly from the
+    chart, without needing to cross-reference the numeric report or
+    this docstring.
 
     annotate_flagged_with: optional column name (present in id_cols)
         to label each flagged point with directly on the chart -- e.g.
@@ -268,19 +344,11 @@ def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None,
 
     title_fn: optional callable(segment_name, info) -> str, where info
         is a dict with {"n", "n_flagged", "pct_flagged", "k",
-        "segment_mad"}. Lets callers apply their own domain-specific
-        segment naming (e.g. translating internal codes into a
-        readable label) without robustkit needing to know anything
-        about that domain. Defaults to a generic title if not given.
-
-    The plotted "expected" line (mode="benchmark") uses the EXACT same
-    values that were used to compute residuals and flag outliers (via
-    benchmark_predict on the actual benchmark_fit, whether that's the
-    default Huber trend or a custom multi-column model) -- not a
-    separately re-fit visual approximation. If a custom model depends
-    on more than x_col, connecting its expected values (sorted by
-    x_col) can look less smooth than a pure Huber curve; that's
-    expected and itself informative, not a rendering bug.
+        "segment_mad", "segment_level"}. Lets callers apply their own
+        domain-specific segment naming (e.g. translating internal
+        codes into a readable label) without robustkit needing to
+        know anything about that domain. Defaults to a generic title
+        if not given.
 
     x_col is required here (unlike mad_outlier_report's optional
     x_col with a custom benchmark_fit), since every page needs
@@ -296,24 +364,53 @@ def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None,
     """
     if mode not in ("benchmark", "local"):
         raise ValueError(f"mode must be 'benchmark' or 'local', got {mode!r}")
+    if segment_mode not in ("exclusive", "drilldown"):
+        raise ValueError(f"segment_mode must be 'exclusive' or 'drilldown', got {segment_mode!r}")
+    if reference not in ("model", "curve"):
+        raise ValueError(f"reference must be 'model' or 'curve', got {reference!r}")
+    if direction not in ("negative", "positive", "two_sided"):
+        raise ValueError(f"direction must be 'negative', 'positive', or 'two_sided', got {direction!r}")
 
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
+    from ..core.trend import fit_huber_trend, predict_trend
+    from ..benchmark.global_model import fit_huber_benchmark, benchmark_predict
 
-    report = mad_outlier_report(
-        df, y_col=y_col, segment_cols=segment_cols, benchmark_fit=benchmark_fit, x_col=x_col,
-        degree=degree, min_size=min_size, k=k, direction=direction, id_cols=id_cols,
-    )
+    benchmark_fit_resolved = benchmark_fit
+    if benchmark_fit_resolved is None:
+        benchmark_fit_resolved = fit_huber_benchmark(
+            df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
+        )
 
-    # mad_outlier_report doesn't return x_col itself; recompute the
-    # identical (deterministic) segmentation to attach it positionally.
+    def _flag(z, k, direction):
+        if direction == "negative":
+            return z < -k
+        if direction == "positive":
+            return z > k
+        return np.abs(z) > k
+
     hierarchy = _build_hierarchy(list(segment_cols))
-    segmented = hierarchical_segment(df, hierarchy, min_size=min_size)
 
-    report = report.copy()
-    report["_x"] = segmented[x_col].to_numpy(dtype=float)
-
-    segments_in_order = sorted(str(s) for s in report["segment"].dropna().unique())
+    # Build (label, sub_df, level) groups directly -- for BOTH modes,
+    # so x_col stays naturally attached to each group's own rows
+    # (avoids any positional-realignment fragility between a
+    # separately-called report and a separately-recomputed
+    # segmentation, which is how the exclusive-only version used to
+    # work).
+    if segment_mode == "exclusive":
+        segmented = hierarchical_segment(df, hierarchy, min_size=min_size)
+        page_groups = [
+            (str(segment_value), group, int(group["segment_level"].iloc[0]))
+            for segment_value, group in segmented.groupby("segment_id", observed=True)
+        ]
+    else:
+        page_groups = []
+        for level, cols in enumerate(hierarchy):
+            for name, sub in df.groupby(cols, observed=True):
+                if len(sub) < min_size:
+                    continue
+                page_groups.append((_label_group_name(name), sub, level))
+        page_groups.sort(key=lambda item: (item[2], item[0]))
 
     if direction == "negative":
         rule_text = f"residual < -{k:.1f} \u00d7 MAD"
@@ -322,62 +419,82 @@ def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None,
     else:
         rule_text = f"|residual| > {k:.1f} \u00d7 MAD"
 
+    reference_text = "benchmark model" if reference == "model" else "local Huber curve (this segment's own data)"
+
     with PdfPages(path) as pdf:
-        for segment_name in segments_in_order:
-            seg_data = report[report["segment"].astype(str) == segment_name]
-            if len(seg_data) < min_points_to_plot:
+        for segment_name, group, segment_level in page_groups:
+            if len(group) < min_points_to_plot:
                 continue
 
+            x = group[x_col].to_numpy(dtype=float)
+            y = group[y_col].to_numpy(dtype=float)
+
+            # --- flagging: driven by `reference`, independent of `mode` ---
+            if reference == "model":
+                expected_for_flagging = np.asarray(benchmark_predict(benchmark_fit_resolved, group, x_col=x_col), dtype=float)
+            else:
+                try:
+                    local_flagging_fit = fit_huber_trend(x, y, degree=degree)
+                    expected_for_flagging = predict_trend(local_flagging_fit, x)
+                except Exception:  # noqa: BLE001 -- too few points/distinct x for a stable local fit
+                    expected_for_flagging = np.full(len(group), np.median(y))
+
+            residual = y - expected_for_flagging
+            median_residual = float(np.median(residual))
+            mad_val = float(1.4826 * np.median(np.abs(residual - median_residual)))
+            safe_mad = mad_val if mad_val > 0 else np.inf
+            z = (residual - median_residual) / safe_mad
+            flagged_mask = _flag(z, k, direction)
+
+            # --- what's drawn: driven by `mode`, independent of `reference` ---
             fig, ax = plt.subplots(figsize=figsize)
 
             if mode == "benchmark":
-                order = seg_data["_x"].to_numpy().argsort()
-                curve_x = seg_data["_x"].to_numpy()[order]
-                curve_y = seg_data["expected"].to_numpy()[order]
-                curve_label = "Benchmark (expected)"
+                benchmark_expected = np.asarray(benchmark_predict(benchmark_fit_resolved, group, x_col=x_col), dtype=float)
+                try:
+                    curve_fit = fit_huber_trend(x, benchmark_expected, degree=degree)
+                    curve_x = np.linspace(x.min(), x.max(), 200)
+                    curve_y = predict_trend(curve_fit, curve_x)
+                except Exception:  # noqa: BLE001 -- degenerate segment (e.g. too few unique x); fall back to raw connected points
+                    order = x.argsort()
+                    curve_x, curve_y = x[order], benchmark_expected[order]
+                curve_label = "Huber fit to benchmark's predictions"
             else:
-                from ..core.trend import fit_huber_trend, predict_trend
-                seg_x = seg_data["_x"].to_numpy(dtype=float)
-                seg_y = seg_data["actual"].to_numpy(dtype=float)
-                local_fit = fit_huber_trend(seg_x, seg_y, degree=degree)
-                curve_x = np.linspace(seg_x.min(), seg_x.max(), 200)
-                curve_y = predict_trend(local_fit, curve_x)
+                local_curve_fit = fit_huber_trend(x, y, degree=degree)
+                curve_x = np.linspace(x.min(), x.max(), 200)
+                curve_y = predict_trend(local_curve_fit, curve_x)
                 curve_label = "Local Huber trend (segment)"
 
-            not_flagged = seg_data[~seg_data["flagged"]]
-            flagged = seg_data[seg_data["flagged"]]
+            matches_flagging = (mode == "benchmark" and reference == "model") or (mode == "local" and reference == "curve")
+            flagged_against_text = reference_text if matches_flagging else f"{reference_text} (not the curve shown)"
 
-            ax.scatter(
-                not_flagged["_x"], not_flagged["actual"],
-                s=15, alpha=0.5, color="steelblue", label="Observations", zorder=2,
-            )
-            ax.scatter(
-                flagged["_x"], flagged["actual"],
-                s=70, color="red", marker="x", linewidths=2,
-                label=f"Flagged outliers (n={len(flagged)})", zorder=4,
-            )
+            not_flagged_x, not_flagged_y = x[~flagged_mask], y[~flagged_mask]
+            flagged_x, flagged_y = x[flagged_mask], y[flagged_mask]
+
+            ax.scatter(not_flagged_x, not_flagged_y, s=15, alpha=0.5, color="steelblue", label="Observations", zorder=2)
+            ax.scatter(flagged_x, flagged_y, s=70, color="red", marker="x", linewidths=2,
+                       label=f"Flagged outliers (n={int(flagged_mask.sum())})", zorder=4)
             ax.plot(curve_x, curve_y, color="darkorange", linewidth=2, label=curve_label, zorder=3)
 
-            if annotate_flagged_with and annotate_flagged_with in flagged.columns:
-                for _, row in flagged.iterrows():
-                    ax.annotate(
-                        str(row[annotate_flagged_with]), (row["_x"], row["actual"]),
-                        fontsize=7, xytext=(4, 4), textcoords="offset points", zorder=5,
-                    )
+            if annotate_flagged_with and id_cols and annotate_flagged_with in group.columns:
+                flagged_ids = group[annotate_flagged_with].to_numpy()[flagged_mask]
+                for fx, fy, fid in zip(flagged_x, flagged_y, flagged_ids):
+                    ax.annotate(str(fid), (fx, fy), fontsize=7, xytext=(4, 4), textcoords="offset points", zorder=5)
 
-            n_total = len(seg_data)
-            n_flagged = len(flagged)
+            n_total = len(group)
+            n_flagged = int(flagged_mask.sum())
             pct_flagged = (n_flagged / n_total * 100) if n_total else 0.0
-            segment_mad = float(seg_data["segment_mad"].iloc[0]) if "segment_mad" in seg_data.columns and n_total else float("nan")
 
             info_text = (
                 f"n = {n_total}\n"
                 f"Flagged = {n_flagged} ({pct_flagged:.1f}%)\n"
-                f"MAD = {segment_mad:,.0f}\n"
-                f"Rule: {rule_text}"
+                f"MAD = {mad_val:,.0f}\n"
+                f"Rule: {rule_text}\n"
+                f"Curve shown: {curve_label}\n"
+                f"Flagged against: {flagged_against_text}"
             )
             ax.text(
-                0.98, 0.02, info_text, transform=ax.transAxes, fontsize=9,
+                0.98, 0.02, info_text, transform=ax.transAxes, fontsize=8,
                 horizontalalignment="right", verticalalignment="bottom",
                 bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.85}, zorder=6,
             )
@@ -385,7 +502,7 @@ def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None,
             if title_fn is not None:
                 title_info = {
                     "n": n_total, "n_flagged": n_flagged, "pct_flagged": pct_flagged,
-                    "k": k, "segment_mad": segment_mad,
+                    "k": k, "segment_mad": mad_val, "segment_level": segment_level,
                 }
                 title = title_fn(segment_name, title_info)
             else:
@@ -393,7 +510,7 @@ def export_outlier_pdf(df, y_col, segment_cols, x_col, path, benchmark_fit=None,
             ax.set_title(title)
             ax.set_xlabel(x_col)
             ax.set_ylabel(y_col)
-            ax.legend(loc="upper left")
+            ax.legend(loc="upper left", fontsize=8)
             ax.grid(True, alpha=0.3)
             fig.tight_layout()
 
@@ -481,7 +598,7 @@ def segment_benchmark_drilldown_report(df, y_col, segment_cols, benchmark_fit=No
 
 
 def mad_outlier_drilldown_report(df, y_col, segment_cols, benchmark_fit=None, x_col=None, degree=2,
-                                  min_size=20, k=3.0, direction="negative", id_cols=None):
+                                  min_size=20, k=3.0, direction="negative", id_cols=None, reference="model"):
     """
     Flag MAD outliers at EVERY level of the hierarchy independently,
     without exclusive assignment -- the same individual can appear
@@ -492,22 +609,31 @@ def mad_outlier_drilldown_report(df, y_col, segment_cols, benchmark_fit=None, x_
     to exactly one (their most specific) segment. See the module
     docstring for when to use which.
 
-    Same flagging logic, k, and direction semantics as
-    mad_outlier_report -- see that function's docstring for details.
+    Same flagging logic, k, direction, and reference semantics as
+    mad_outlier_report -- see that function's docstring for details,
+    including what reference="curve" does and why x_col is required
+    for it regardless of whether benchmark_fit is given.
     """
     if direction not in ("negative", "positive", "two_sided"):
         raise ValueError(f"direction must be 'negative', 'positive', or 'two_sided', got {direction!r}")
+    if reference not in ("model", "curve"):
+        raise ValueError(f"reference must be 'model' or 'curve', got {reference!r}")
+    if reference == "curve" and x_col is None:
+        raise ValueError("x_col is required when reference='curve' (a local trend needs something to fit against).")
 
-    benchmark_fit_resolved = benchmark_fit
-    if benchmark_fit_resolved is None:
-        if x_col is None:
-            raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
-        from ..benchmark.global_model import fit_huber_benchmark
-        benchmark_fit_resolved = fit_huber_benchmark(
-            df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
-        )
-
-    from ..benchmark.global_model import benchmark_predict
+    benchmark_fit_resolved = None
+    if reference == "model":
+        benchmark_fit_resolved = benchmark_fit
+        if benchmark_fit_resolved is None:
+            if x_col is None:
+                raise ValueError("x_col must be supplied when no custom benchmark model is provided.")
+            from ..benchmark.global_model import fit_huber_benchmark
+            benchmark_fit_resolved = fit_huber_benchmark(
+                df[x_col].to_numpy(dtype=float), df[y_col].to_numpy(dtype=float), degree=degree,
+            )
+        from ..benchmark.global_model import benchmark_predict
+    else:
+        from ..core.trend import fit_huber_trend, predict_trend
 
     hierarchy = _build_hierarchy(list(segment_cols))
     blocks = []
@@ -519,7 +645,17 @@ def mad_outlier_drilldown_report(df, y_col, segment_cols, benchmark_fit=None, x_
 
             label = _label_group_name(name)
             y = sub[y_col].to_numpy(dtype=float)
-            expected = np.asarray(benchmark_predict(benchmark_fit_resolved, sub, x_col=x_col), dtype=float)
+
+            if reference == "model":
+                expected = np.asarray(benchmark_predict(benchmark_fit_resolved, sub, x_col=x_col), dtype=float)
+            else:
+                seg_x = sub[x_col].to_numpy(dtype=float)
+                try:
+                    local_fit = fit_huber_trend(seg_x, y, degree=degree)
+                    expected = predict_trend(local_fit, seg_x)
+                except Exception:  # noqa: BLE001 -- too few points/distinct x for a stable local fit
+                    expected = np.full(len(sub), np.median(y))
+
             residual = y - expected
             residual_pct = np.where(expected != 0, residual / expected * 100, np.nan)
 
