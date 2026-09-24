@@ -94,6 +94,28 @@ def _merge_style(defaults, overrides):
     return merged
 
 
+def _format_scale_adaptive(value):
+    """Format a number with a decimal precision that adapts to its
+    magnitude, so a value doesn't silently round to a meaningless "0"
+    -- e.g. an IQR of residuals of 0.071 for a small-scale variable
+    like a proportion or rate, as opposed to 5140 for a salary-scale
+    one. Never uses scientific notation, since this is for a
+    human-readable info box, not a table of precise figures. Large
+    values use a space as the thousands separator (matching the
+    convention of the wage-analysis workbook this module is based
+    on), not a comma."""
+    abs_val = abs(value)
+    if abs_val == 0:
+        return "0"
+    if abs_val >= 100:
+        return f"{value:,.0f}".replace(",", " ")
+    if abs_val >= 1:
+        return f"{value:,.1f}".replace(",", " ")
+    if abs_val >= 0.01:
+        return f"{value:.3f}"
+    return f"{value:.4f}"
+
+
 def _unique_value_summary(x, y, min_n_for_iqr=5):
     """
     Median/Q1/Q3 grouped by each EXACT x value (not binned). Q1/Q3 are
@@ -291,7 +313,11 @@ def plot_huber_iqr(x, y, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
         primary_method = methods[0]
         if residual_box_metric == "r2":
             gof = goodness_of_fit(x, y, degree=degree, method=primary_method if primary_method in ("huber", "tukey", "ols") else "huber")
-            textstr = f"R\u00b2={gof['r_squared']:.2f}\nMAE={gof['mae']:.0f}\nRMSE={gof['rmse']:.0f}"
+            textstr = (
+                f"R\u00b2={gof['r_squared']:.2f}\n"
+                f"MAE={_format_scale_adaptive(gof['mae'])}\n"
+                f"RMSE={_format_scale_adaptive(gof['rmse'])}"
+            )
         else:
             fit_for_metric = _METHOD_FITTERS.get(primary_method, fit_huber_trend)(x, y, degree=degree)
             pred = predict_trend(fit_for_metric, x)
@@ -299,7 +325,7 @@ def plot_huber_iqr(x, y, degree=2, bins=15, grouping="bin", min_n_for_iqr=5,
             ape = np.abs(residuals / np.where(y != 0, y, np.nan)) * 100
             mdape = float(np.nanmedian(ape))
             iqr_resid = float(np.percentile(residuals, 75) - np.percentile(residuals, 25))
-            textstr = f"MdAPE: {mdape:.1f} %\nIQR(resid): {iqr_resid:,.0f}".replace(",", " ")
+            textstr = f"MdAPE: {mdape:.1f} %\nIQR(resid): {_format_scale_adaptive(iqr_resid)}"
         ax.text(
             0.02, 0.98, textstr, transform=ax.transAxes, fontsize=9,
             verticalalignment="top", bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},

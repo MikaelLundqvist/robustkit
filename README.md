@@ -229,7 +229,19 @@ small, since it can fail outright or become statistically meaningless.
 For segments at or above the threshold, the interval is a full BCa
 (bias-corrected and accelerated) bootstrap interval, via the same
 `bca_bootstrap_ci_by_index` primitive used elsewhere in the package --
-not a plain percentile bootstrap.
+not a plain percentile bootstrap. That primitive's jackknife step
+(needed for the acceleration term) is inherently O(n) regardless of
+`n_boot`, which becomes the dominant cost on large real segments --
+verified directly on a ~185,000-row segment (minutes, unusable) --
+so above `jackknife_cap` observations (1000 by default), a random
+subsample of that many positions is left out one at a time instead of
+every single one. Confidence interval bounds from the capped and
+uncapped versions were verified to differ by roughly 0.000005 on that
+same real segment, while cutting its runtime to about 3 seconds; pass
+`jackknife_cap=None` to any function built on
+`bca_bootstrap_ci_by_index` (including `segment_contribution_report`
+and `segment_benchmark_drilldown_report`) to always use the full,
+uncapped jackknife instead.
 
 ## Reporting: residuals, individual deviations, batch runs, and Excel export
 

@@ -282,3 +282,33 @@ def test_plot_huber_iqr_legend_does_not_overlap_residual_box():
     # loc="lower right" corresponds to matplotlib's internal code 4
     assert legend._loc == 4
     plt.close()
+
+
+def test_format_scale_adaptive_small_values_not_rounded_to_zero():
+    """Regression: found via real-data validation (blood alcohol
+    content, IQR ~0.07) -- a small-scale IQR(resid) must not silently
+    round to a meaningless '0'."""
+    from robustkit.report.visualize_huber_iqr import _format_scale_adaptive
+    assert _format_scale_adaptive(0.0707) == "0.071"
+    assert _format_scale_adaptive(0.0) == "0"
+
+
+def test_format_scale_adaptive_large_values_use_swedish_thousands_separator():
+    from robustkit.report.visualize_huber_iqr import _format_scale_adaptive
+    assert _format_scale_adaptive(5140.3) == "5 140"
+    assert "," not in _format_scale_adaptive(5140.3)
+
+
+def test_plot_huber_iqr_residual_box_shows_nonzero_for_small_scale_y():
+    """End-to-end: a small-scale y variable (e.g. a rate/proportion)
+    must show a real IQR(resid) figure in the chart, not '0'."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    rng = np.random.default_rng(0)
+    x = rng.uniform(20, 80, 2000)
+    y = 0.10 + 0.001 * x + rng.normal(0, 0.03, 2000)  # small-scale, BAC-like
+    plot_huber_iqr(x, y, residual_box_metric="mdape")
+    ax = plt.gca()
+    texts = [t.get_text() for t in ax.texts]
+    assert any("IQR(resid): 0." in t for t in texts), f"expected a nonzero decimal IQR(resid), got: {texts}"
+    plt.close()
