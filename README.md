@@ -448,8 +448,15 @@ no benchmark model involved at all. Use `"curve"` when the flagging
 itself, not just a chart, should match "how does this person compare
 to their immediate segment-mates" -- e.g. a report for someone who
 shouldn't need the underlying benchmark model explained to trust the
-numbers. `x_col` is required either way, but `reference="curve"` needs
-it even when a custom `benchmark_fit` would otherwise have made it
+numbers. `"benchmark_curve"` is a third option in between: like
+`"model"`, it starts from `benchmark_fit`'s raw predictions, but then,
+WITHIN each segment, fits a Huber trend to those predictions (not to
+the actual y values, as `"curve"` does) and flags against that smoothed
+curve -- the exact reference `export_outlier_pdf`'s `mode="benchmark"`
+draws, so pairing the two gives full consistency without discarding
+the benchmark model's other covariates the way `"curve"` does.
+`x_col` is required for all three, but `"curve"` and `"benchmark_curve"`
+need it even when a custom `benchmark_fit` would otherwise have made it
 optional. `mad_outlier_drilldown_report` takes the same `reference`
 parameter, with identical semantics.
 
@@ -482,18 +489,22 @@ immediate colleagues?"
 
 `mode` (what's drawn) and `reference` (what flagging actually uses)
 are independent choices -- `export_outlier_pdf` takes the same
-`reference="model"/"curve"` parameter as `mad_outlier_report`, and
-always computes flagging exactly the way that report would with
-matching arguments, so the chart and the numeric report never
-disagree. Pairing `mode="local"` with `reference="curve"` gives a
-chart where the drawn curve and the flagging rule are the *same
-thing* -- no benchmark model to explain at all, useful for charts
-handed to someone who should just be able to look and trust it. Other
-combinations -- e.g. `mode="benchmark"` with `reference="curve"` --
-are allowed too (draw the benchmark's smoothed curve for context, but
-flag against each segment's own local trend); the info box always
-states plainly which curve is drawn and which reference the flagging
-rule actually used, so no combination is ambiguous on the page itself.
+`reference="model"/"curve"/"benchmark_curve"` parameter as
+`mad_outlier_report`, and always computes flagging exactly the way
+that report would with matching arguments, so the chart and the
+numeric report never disagree. Pairing `mode="local"` with
+`reference="curve"`, or `mode="benchmark"` with
+`reference="benchmark_curve"`, gives a chart where the drawn curve and
+the flagging rule are the *same thing* -- no benchmark model to
+explain at all in the first case, or the full benchmark model's
+covariates preserved (just smoothed for display) in the second --
+useful for charts handed to someone who should just be able to look
+and trust it. Other combinations -- e.g. `mode="benchmark"` with
+`reference="curve"` -- are allowed too (draw the benchmark's smoothed
+curve for context, but flag against each segment's own local trend);
+the info box always states plainly which curve is drawn and which
+reference the flagging rule actually used, so no combination is
+ambiguous on the page itself.
 
 `segment_mode="exclusive"` (default) vs. `segment_mode="drilldown"`
 offers the same choice as `export_huber_iqr_pdf`: one page per
