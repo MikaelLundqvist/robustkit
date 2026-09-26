@@ -79,7 +79,7 @@ def benchmark_predict(benchmark_fit, data, x_col=None):
 
 
 def segment_position_report(df, segment_col, y_col, benchmark_fit=None, x_col=None,
-                             degree=2, n_boot="auto", ci=95, seed=0):
+                             degree=2, n_boot="auto", ci=95, seed=0, jackknife_cap=1000):
     """
     Compare each segment's outcome against a benchmark model.
 
@@ -106,6 +106,10 @@ def segment_position_report(df, segment_col, y_col, benchmark_fit=None, x_col=No
     the difference is a full BCa (bias-corrected and accelerated)
     bootstrap interval, via bca_bootstrap_ci_by_index -- not a plain
     percentile bootstrap.
+
+    jackknife_cap: see bca_bootstrap_ci_by_index's docstring -- caps
+    the O(n) jackknife pass at a fixed sample size for large segments
+    (1000 by default). Pass None to always use the full jackknife.
     """
     if benchmark_fit is None:
         if x_col is None:
@@ -121,7 +125,7 @@ def segment_position_report(df, segment_col, y_col, benchmark_fit=None, x_col=No
         n = len(group)
 
         y = group[y_col].to_numpy(dtype=float)
-        expected = benchmark_predict(benchmark_fit, group, x_col=x_col)
+        expected = np.asarray(benchmark_predict(benchmark_fit, group, x_col=x_col), dtype=float)
 
         observed_median = float(np.median(y))
         expected_median = float(np.median(expected))
@@ -140,13 +144,17 @@ def segment_position_report(df, segment_col, y_col, benchmark_fit=None, x_col=No
             })
             continue
 
-        def stat_by_index(idx, _group=group, _fit=benchmark_fit):
-            sub = _group.iloc[idx]
-            y_sub = sub[y_col].to_numpy(dtype=float)
-            exp_sub = benchmark_predict(_fit, sub, x_col=x_col)
-            return float(np.median(y_sub - exp_sub))
+        # Precompute the per-row residual ONCE -- it doesn't change
+        # between resamples, since resampling only changes WHICH rows
+        # are included, not the model's prediction for a given
+        # original row. See segment_awareness.reports for the real,
+        # measured impact of this on large segments (minutes -> ~3s).
+        residual = y - expected
 
-        ci_result = bca_bootstrap_ci_by_index(n, stat_by_index, n_boot=n_boot, ci=ci, seed=seed)
+        def stat_by_index(idx, _residual=residual):
+            return float(np.median(_residual[idx]))
+
+        ci_result = bca_bootstrap_ci_by_index(n, stat_by_index, n_boot=n_boot, ci=ci, seed=seed, jackknife_cap=jackknife_cap)
 
         rows.append({
             "segment": segment_value,

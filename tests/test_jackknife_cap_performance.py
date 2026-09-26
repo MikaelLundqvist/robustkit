@@ -120,3 +120,18 @@ def test_segment_contribution_report_tractable_on_large_real_scale():
     elapsed = time.time() - t0
     assert elapsed < 30, f"expected well under 30s, took {elapsed:.1f}s"
     assert len(report) > 0
+
+
+def test_segment_position_report_tractable_on_large_real_scale():
+    """segment_position_report had the same unfixed .iloc + jackknife
+    pattern as segment_contribution_report -- discovered while
+    building the book chapter that showcases it. Same regression
+    check: must stay fast even on a large segment."""
+    from robustkit import segment_position_report
+    df = make_moderate_df(n=60000)
+    t0 = time.time()
+    report = segment_position_report(df, segment_col="JobFamily", y_col="salary", x_col="age")
+    elapsed = time.time() - t0
+    assert elapsed < 15, f"expected well under 15s, took {elapsed:.1f}s"
+    assert len(report) > 0
+    assert report["ci_available"].all()
