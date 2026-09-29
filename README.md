@@ -243,6 +243,116 @@ same real segment, while cutting its runtime to about 3 seconds; pass
 and `segment_benchmark_drilldown_report`) to always use the full,
 uncapped jackknife instead.
 
+`plot_segment_vs_benchmark` is the visual counterpart to
+`segment_position_report`: a single summary difference (e.g. "ITS is
+$988 below benchmark") can arise from several different underlying
+patterns that look identical in a table -- the whole segment sitting
+a bit below throughout, only its younger members sitting far below,
+only its older members, or two opposing effects that happen to cancel
+out in the median. This plots, for one or more segments, the actual
+observations, each segment's own OBSERVED trend (via LOWESS -- a
+flexible, assumption-free local smoother, deliberately not a
+Huber/Tukey/OLS fit at a fixed degree, since the point here is a
+segment's raw shape without imposing one), and the benchmark's
+expected trend for that segment, letting you see exactly where
+across `x_col` a segment's divergence actually occurs:
+
+```python
+from robustkit import plot_segment_vs_benchmark
+
+plot_segment_vs_benchmark(
+    df, segment_col="JobFamily", segment_values=["ENG", "ITS"],
+    y_col="salary", x_col="age", benchmark_fit=model_c,
+)
+```
+
+Works with a custom, multivariate `benchmark_fit` (any
+`predict(dataframe)` object) the same way `segment_position_report`
+does -- other columns the model needs are held constant per segment
+(at that segment's own value) when building the benchmark curve, so a
+segment like `"ENG_P2_Yes"` gets its benchmark line computed at
+`P_niva="P2", OT="Yes"` throughout, not averaged across values that
+don't apply to it. Requires `statsmodels` (imported lazily, same as
+`fit_tukey_trend`) -- this is a diagnostic plot only, not a source of
+numbers other functions build on, which is why LOWESS is used here
+specifically rather than elsewhere in the package.
+
+`benchmark_goodness_of_fit` evaluates an ALREADY-FITTED benchmark's
+overall explanatory power -- r_squared, rmse, mae -- against the
+actual values in y_col:
+
+```python
+from robustkit import benchmark_goodness_of_fit
+
+benchmark_goodness_of_fit(df, y_col="salary", benchmark_fit=model_c, x_col="age")
+# {"r_squared": 0.997, "rmse": 895, "mae": 712}
+```
+
+This is a different question from screening, below: even a screen
+that finds nothing (every candidate's residual mutual information
+near zero) says nothing about how much the benchmark explains
+overall -- a benchmark can be "complete", in the sense that no
+obvious structure is left to add, while still explaining relatively
+little of `y_col`'s variance if the underlying noise is simply large.
+Unlike `core.goodness_of_fit.goodness_of_fit`, which fits its own
+trend internally and therefore only evaluates a single-column
+robustkit trend, this function evaluates a benchmark that's already
+been fit elsewhere -- a robustkit trend-fit dict, or any custom,
+potentially multivariate `predict(dataframe)` object -- and never
+re-fits anything itself. Verified directly: an intentionally
+under-specified (age-only, linear) benchmark scored r_squared=0.874;
+adding the true quadratic term and the two missing categorical
+drivers raised it to r_squared=0.997 on the same data.
+
+`benchmark_screening_report` screens a fitted benchmark for likely-missing
+structure -- answering "is this benchmark good enough, or is there
+something it's still missing?" -- without ever building or fitting a
+new benchmark model automatically. Its `result["fit"]` entry is exactly
+`benchmark_goodness_of_fit`'s output for the same benchmark, so the two
+questions -- "how much does it explain overall" and "what specific
+structure might it still be missing" -- are always available side by
+side, numerically identical to calling either function directly:
+
+```python
+from robustkit import benchmark_screening_report
+
+result = benchmark_screening_report(
+    df, y_col="salary", benchmark_fit=model_c, x_col="age",
+    candidate_cols=["JobFamily", "level"],
+)
+result["fit"]            # how much does the benchmark explain overall?
+result["polynomial"]     # does x_col's current degree capture its shape?
+result["interactions"]   # is there missing categorical structure or an interaction?
+```
+
+Two genuinely different questions, deliberately answered with two
+different tools rather than one unified ranking, because mutual
+information cannot distinguish them. `result["polynomial"]` re-runs
+`compare_polynomial_degrees` (Chapter 5) on the raw `(x_col, y_col)`
+relationship directly -- checking polynomial degree this way, rather
+than via mutual information, matters because MI is invariant to
+monotonic reparametrization: on a domain where `x_col` is always
+positive, `x_col`, `x_col**2`, and `x_col**3` are all monotonic
+transforms of each other, so MI-based screening would report them as
+carrying nearly identical information regardless of which degree
+actually fits -- verified directly, within about 2% of each other on
+a deliberately under-fit benchmark that clearly needed degree 2, not
+1. `result["interactions"]` instead fits the benchmark's own residual
+as the target of `rank_features` -- reliable here specifically because
+a genuinely missing categorical variable, or a combination of two
+(`"JobFamily x level"`, generated automatically for every pairwise
+combination of `candidate_cols` unless `interaction_pairs` is given
+explicitly), is not a reparametrization of anything already in the
+model, so MI detects it directly. Sorted by `information_efficiency`,
+not raw `mutual_information` -- verified directly: an interaction term
+can carry MORE raw mutual information than a simpler candidate while
+still ranking lower on efficiency, the same high-cardinality trap
+Chapter 8's `zip_code` example demonstrated. Every row is a candidate
+worth investigating further, not a confirmed missing term -- automatic
+interaction generation grows combinatorially and carries real
+multiple-testing risk, especially with many candidate columns or a
+modest sample size.
+
 ## Reporting: residuals, individual deviations, batch runs, and Excel export
 
 Four functions built on the same benchmark contract as

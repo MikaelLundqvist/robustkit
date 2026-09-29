@@ -30,7 +30,7 @@ from .information.conditional_mi import conditional_mutual_information
 from .information.communication import communication_score, rank_by_communication
 from .information.pairs import pair_redundancy, pair_synergy, rank_communicative_pairs
 from .common.quadrants import classify_quadrants
-from .benchmark.global_model import fit_huber_benchmark, segment_position_report, benchmark_predict, MIN_POINTS_FOR_CI
+from .benchmark.global_model import fit_huber_benchmark, segment_position_report, benchmark_predict, MIN_POINTS_FOR_CI, plot_segment_vs_benchmark, benchmark_screening_report, benchmark_goodness_of_fit
 from .benchmark.reporting import residual_summary, deviation_report, benchmark_report_suite, export_benchmark_excel, export_benchmark_excel_no_deps
 from .benchmark.robustness_map import feature_robustness_report, plot_feature_robustness
 from .report.dispersion import iqr, dispersion_ratio, dispersion_by_bin
@@ -91,6 +91,9 @@ __all__ = [
     "classify_quadrants",
     "fit_huber_benchmark",
     "segment_position_report",
+    "plot_segment_vs_benchmark",
+    "benchmark_screening_report",
+    "benchmark_goodness_of_fit",
     "benchmark_predict",
     "MIN_POINTS_FOR_CI",
     "residual_summary",
