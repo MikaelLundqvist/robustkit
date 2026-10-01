@@ -220,6 +220,28 @@ report = segment_position_report(
 `segment_position_report` never inspects what the model uses
 internally -- it only calls `predict()`.
 
+**A pitfall worth knowing about if your custom model's `predict()`
+uses `pd.get_dummies()`:** `segment_position_report` and
+`plot_segment_vs_benchmark` both call `predict()` on ONE segment at a
+time -- data that, by construction, has only a single value in each
+of its defining categorical columns. Calling `pd.get_dummies()` fresh
+on data like that generates a dummy column only for categories
+actually present in that call, which for a single, fully-specified
+segment is often none at all; a `reindex(columns=..., fill_value=0)`
+step then silently fills in `0` where the correct value was `1`,
+corrupting every per-segment prediction without raising an error.
+Verified directly: an under-specified benchmark's segment-level
+finding came out with the wrong sign and a wildly different magnitude
+until this was fixed. The fix is to fit a `sklearn.OneHotEncoder` (or
+equivalent) ONCE during training and reuse that SAME fitted encoder
+inside `predict()`, rather than re-deriving dummy columns from
+whatever data `predict()` happens to receive -- a fitted encoder
+always knows the full set of training-time categories, regardless of
+how homogeneous a later single call's data is. (`mad_outlier_report`
+and `dual_reference_outlier_report` are NOT affected by this, since
+both call `predict()` once on the full, heterogeneous population
+rather than per segment.)
+
 **Small segments:** groups with fewer than `MIN_POINTS_FOR_CI` (default
 20) observations still get `observed_median` / `expected_median` /
 `difference`, but `ci_lower` / `ci_upper` are `NaN` and
