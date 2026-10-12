@@ -1067,16 +1067,19 @@ from robustkit import (
 )
 
 # Method 1: repeat the mean n times -- zero within-group spread.
-# Recovers between-group regression coefficients reasonably well
+# Equivalent to weighting each group by n (see "What the flat method
+# actually is", below); recovers between-group regression coefficients
 # (validated in the original technique this is based on) but
 # understates individual-level variation.
 flat = expand_aggregated_table_flat(df, n_col="n", mean_col="mean_salary", group_cols=["age"])
 
 # Method 2: borrow a dispersion_ratio from a DIFFERENT table that does
 # report quantiles, and use it to imply an approximate spread around
-# the mean. Stacks two assumptions (mean-as-median, and that the
-# borrowed ratio transfers to this population) -- illustrative, not a
-# substitute for genuine quantile data for this specific table.
+# the given value, which becomes the reconstruction's MEDIAN (see
+# "What the borrowed-dispersion method does with `mean_col`", below).
+# Stacks two assumptions (mean-as-median, and that the borrowed ratio
+# transfers to this population) -- illustrative, not a substitute for
+# genuine quantile data for this specific table.
 borrowed = expand_aggregated_table_borrowed_dispersion(
     df, n_col="n", mean_col="mean_salary", dispersion_ratio=0.45, group_cols=["age"],
 )
@@ -1084,6 +1087,53 @@ borrowed = expand_aggregated_table_borrowed_dispersion(
 # Compare both for a single group directly:
 compare_reconstruction_methods(n=2000, mean=52200, dispersion_ratio=0.45)
 ```
+
+**What the flat method actually is.** Repeating a group's number *n*
+times is exactly the same as weighting that group by *n*. For an
+ordinary least-squares fit whose regressors are constant within each
+group (an age band, say), a fit on the reconstructed rows is identical
+to a fit on the group values weighted by *n* -- and therefore to a fit
+on the original individuals; in a synthetic check, a slope of 1.948
+against 1.950. For a Huber fit it matches a Huber fit on the group
+values weighted by *n* (2.029 against 2.029). robustkit's `fit_*_trend`
+functions take no weights, so this is how to obtain *n*-weighting here.
+Treat it as a workaround rather than a feature: it adds no information
+beyond the group values and sizes. Two practical notes:
+
+- It answers questions about whatever the table's number is. A table of
+  means supports questions about the mean; a table of medians,
+  questions about the typical value. Asking the other question gives
+  large errors -- in the synthetic check, +75% (a means table asked
+  about the typical value) and -37% (a medians table asked about the
+  mean). The `mean_col` argument accepts a median if that is what the
+  table gives.
+- Only the relative group sizes matter, so if the true *n* is very large
+  (national tables can report millions per group), scale every *n* down
+  by a common factor before reconstructing. Scaling by 0.1 changed a
+  fitted slope only in the fourth decimal in the same check; scaling by
+  0.01, which rounds the smallest groups to a few rows, moved it by
+  under half a percent. This applies to the flat method only -- in
+  `expand_aggregated_table` and the borrowed-dispersion reconstruction
+  the number of draws changes the tail, not just the weight.
+
+**What the borrowed-dispersion method does with `mean_col`.** The
+reconstruction's *median* is set to that value, whatever the column is
+called. If the table publishes a median, pass it: the first assumption
+above (mean-as-median) then does not apply, and the reconstruction
+reproduces the median (a published 10.4 came back as 10.3 in a
+synthetic check). If the table publishes a mean, two things follow:
+
+- The reconstruction does not reproduce the mean it was given. A
+  lognormal's mean lies above its median, so the reconstructed mean is
+  about `mean * exp(sigma**2 / 2)`, with
+  `sigma = ln((1 + r/2) / (1 - r/2)) / (2 * 0.6745)` for a borrowed
+  ratio `r`. For `r` = 0.4, 0.8 and 1.2 that is roughly 5%, 22% and 70%
+  above the published mean (15.0 published, 18.3 reconstructed at
+  `r` = 0.8 in the synthetic check).
+- How far a mean sits above its median depends on the spread, so the
+  error this stand-in introduces differs between groups whose spread
+  differs (in the same check the mean was 18% above the median in the
+  youngest age band and 45% above it in the oldest).
 
 Both methods are documented with their specific assumptions rather
 than presented as equally valid defaults -- being explicit about which

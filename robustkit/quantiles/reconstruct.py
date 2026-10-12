@@ -169,6 +169,29 @@ def expand_aggregated_group_flat(n, mean, seed=0):
     individual variation and will bias any analysis that depends on
     within-group spread (e.g. Cook's distance, dispersion measures)
     toward zero.
+
+    What this actually provides: repeating a group's value n times is
+    exactly equivalent to weighting that group by n. For a least-squares
+    fit whose regressors are constant within each group (e.g. an age
+    band), OLS on the reconstructed rows is identical to OLS on the
+    group values weighted by n, and therefore to OLS on the original
+    individuals (in a synthetic check: slope 1.948 vs 1.950). The
+    fit_*_trend functions take no weights, so this reconstruction is the
+    way to obtain n-weighting -- a workaround, not a source of
+    information: it adds nothing beyond the group values and sizes.
+
+    The value is treated as whatever it is. A table of means supports
+    questions about the mean; a table of medians, questions about the
+    typical value. Asking a means table about the typical value (or the
+    reverse) gives large errors, because the two trends differ whenever
+    the spread changes between groups. (The `mean` argument accepts a
+    median if that is what the table publishes.)
+
+    Only the relative sizes of the groups matter, so for a very large
+    true n (national tables can report millions per group) scale all n
+    down by a common factor before reconstructing -- scaling by 0.1
+    changed a fitted slope only in the fourth decimal in a synthetic
+    check.
     """
     return np.full(int(n), float(mean), dtype=float)
 
@@ -199,6 +222,26 @@ def expand_aggregated_group_borrowed_dispersion(n, mean, dispersion_ratio, seed=
     ONE way to construct a (q1, q3) pair consistent with the ratio, not
     the only one; it is chosen for simplicity, not because it is known
     to be correct.
+
+    What the `mean` argument does, and what follows from it: the
+    reconstruction's MEDIAN is set to this value. Despite the name,
+    that is exactly what you want if the table publishes a median --
+    pass the median, and assumption 1 above does not apply (in a
+    synthetic check a published median of 10.4 came back as 10.3). If
+    the table publishes a mean, two things follow:
+
+      * The reconstruction does not reproduce the mean it was given.
+        A lognormal's mean lies above its median, so the reconstructed
+        mean is about mean * exp(sigma**2 / 2), where
+        sigma = ln((1 + r/2) / (1 - r/2)) / (2 * 0.6745). For r = 0.4,
+        0.8 and 1.2 that is roughly 5%, 22% and 70% above the published
+        mean (synthetic check: 15.0 published, 18.3 reconstructed, at
+        r = 0.8).
+      * How far a mean sits above its median depends on the spread, so
+        the error this stand-in introduces differs between groups whose
+        spread differs (in the same check the mean was 18% above the
+        median in the youngest age band and 45% above it in the
+        oldest).
     """
     if dispersion_ratio <= 0:
         raise ValueError("dispersion_ratio must be positive")
@@ -227,7 +270,7 @@ def _expand_table_generic(df, n_col, group_cols, value_name, per_row_fn):
 
 
 def expand_aggregated_table_flat(df, n_col, mean_col, group_cols=None, value_name="value"):
-    """Table-level version of expand_aggregated_group_flat -- see its docstring for the method's limitations."""
+    """Table-level version of expand_aggregated_group_flat -- see its docstring for what the method provides (n-weighting) and its limitations."""
     return _expand_table_generic(
         df, n_col, group_cols, value_name,
         per_row_fn=lambda row, i: expand_aggregated_group_flat(row[n_col], row[mean_col]),
@@ -237,6 +280,9 @@ def expand_aggregated_table_flat(df, n_col, mean_col, group_cols=None, value_nam
 def expand_aggregated_table_borrowed_dispersion(df, n_col, mean_col, dispersion_ratio, group_cols=None, value_name="value", seed=0):
     """
     Table-level version of expand_aggregated_group_borrowed_dispersion.
+    See its docstring for what `mean_col` is used as (the
+    reconstruction's median) and what that implies when the table
+    publishes a mean rather than a median.
 
     dispersion_ratio: either a single float applied to every row, or
         the name of a column in df providing a per-row ratio (e.g. if
