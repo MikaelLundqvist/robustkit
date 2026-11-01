@@ -15,6 +15,7 @@ Modules:
 
 from .core.trend import fit_huber_trend, fit_tukey_trend, fit_ols_trend, predict_trend, trend_derivative
 from .core.stability import model_stability_pct
+from .core.pointwise import pointwise_stability_report, plot_pointwise_stability
 from .core.diagnostics import cooks_diagnostic, cook_impact
 from .core.uncertainty import bootstrap_band, bca_bootstrap_ci, bca_bootstrap_ci_by_index
 from .core.consistency import check_row_integrity, compare_row_sets, segment_consistency_report
@@ -61,6 +62,8 @@ __all__ = [
     "predict_trend",
     "trend_derivative",
     "model_stability_pct",
+    "pointwise_stability_report",
+    "plot_pointwise_stability",
     "cooks_diagnostic",
     "cook_impact",
     "bootstrap_band",
@@ -137,4 +140,4 @@ __all__ = [
     "compare_reconstruction_methods",
 ]
 
-__version__ = "0.0.1"
+__version__ = "0.7.0"

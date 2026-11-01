@@ -30,6 +30,14 @@ individual-level data from aggregated summaries), and
 analysis, no manual hierarchy construction required) are stable and
 tested.
 
+**What is new in 0.7.0:** see `CHANGELOG.md`. In short: a `reference`
+parameter for the outlier reports (`"model"`, `"curve"`, `"benchmark_curve"`),
+dual-reference outlier classification, benchmark screening and
+goodness-of-fit, pointwise stability, per-segment Huber+IQR export,
+several drilldown and quality reports, and `jackknife_cap` for faster
+bootstrap intervals on large segments. Calls written for 0.6.0 keep
+working.
+
 **Recent fixes from real-dataset validation:**
 - `rank_features`/`quadrant_report`/`rank_communicative_pairs` no
   longer crash on pandas `Categorical` columns containing missing
@@ -88,6 +96,31 @@ ci = bca_bootstrap_ci(x, y, statistic_fn=lambda x_, y_: np.median(y_))
 ```
 
 See `examples/quickstart_tutorial.py` for a complete, runnable walkthrough.
+
+## Where along x is the trend weak?
+
+`model_stability_pct` summarises the disagreement between Huber, Tukey and
+OLS over the whole x range, and `bootstrap_band` gives the sampling
+uncertainty of the Huber curve. `pointwise_stability_report` puts the two
+side by side at every grid point, together with the number of observations
+near that point, so that a thin region (say, few young employees) can be told
+apart from a region where the fitting method matters:
+
+```python
+from robustkit import pointwise_stability_report, plot_pointwise_stability
+
+report = pointwise_stability_report(x, y, n_boot=300)
+report[["x", "method_spread_pct", "band_width_pct", "local_n", "dominant"]]
+# dominant == "sampling": the bootstrap band is wider than the methods' spread
+# dominant == "method":   the methods differ by more than the band
+
+plot_pointwise_stability(x, y, report=report)   # curves, band and a rug of observations
+```
+
+`window_frac` (default 0.1) sets the width of the window used for `local_n`,
+as a fraction of the x range. The three curves, the band and `pct_spread` are
+the same numbers `model_stability_pct` and `bootstrap_band` return; nothing new
+is fitted. Requires statsmodels (Tukey), like `model_stability_pct`.
 
 ## Trend growth rate and goodness of fit
 
@@ -939,7 +972,7 @@ export_huber_iqr_pdf(..., mode="drilldown")
 
 All of `plot_huber_iqr`'s style parameters (`methods`, `show_points`,
 `show_bootstrap_band`, `cap_style`, `residual_box_metric`, `ylim`,
-`style`, ...) pass straight through `export_huber_iqr_pdf` to each
+`style`, `show_undersized_points`, ...) pass straight through `export_huber_iqr_pdf` to each
 segment's page -- including `show_points`, which switches between
 "publisher" charts (the default, `show_points=False`, no raw scatter)
 and "analyst" charts (`show_points=True`, individual observations
