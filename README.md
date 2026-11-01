@@ -1,9 +1,5 @@
 # robustkit
 
-> ⚠️ **Under active development.** This is an early placeholder release
-> to claim the package name on PyPI. The API is incomplete and may
-> change without notice. Not yet recommended for production use.
-
 Practical tools for robust analysis of a single continuous relationship:
 y as a function of one continuous x.
 
